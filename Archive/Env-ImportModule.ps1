@@ -171,7 +171,7 @@ catch {
 
 
 Write-Host "Starting to call Import-LatestModulesLocalRepository..."
-Import-LatestModulesLocalRepository -ModulesFolderPath $ModulesFolderPath -ScriptPath $PSScriptRoot
+Import-ModulesFromLocalRepository -ModulesFolderPath $ModulesFolderPath -ScriptPath $PSScriptRoot
 
 ###############################################################################################################################
 ############################################### END MODULE LOADING ############################################################

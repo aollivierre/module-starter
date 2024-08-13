@@ -1,3 +1,8 @@
+$processList = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
+$scriptDetails = @(
+    @{ Url = "https://raw.githubusercontent.com/aollivierre/module-starter/main/Clone-EnhancedRepos.ps1" }
+)
+
 # Function to test if the script is running as an administrator
 function Test-Admin {
     $currentUser = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -35,20 +40,6 @@ function Get-Platform {
     }
 }
 
-# Function to set up global paths
-function Setup-GlobalPaths {
-    if ($env:DOCKER_ENV -eq $true) {
-        $global:scriptBasePath = $env:SCRIPT_BASE_PATH
-        $global:modulesBasePath = $env:MODULES_BASE_PATH
-    }
-    else {
-        $global:scriptBasePath = $PSScriptRoot
-        $global:modulesBasePath = "C:\code\modules"
-        if (-Not (Test-Path $global:modulesBasePath)) {
-            $global:modulesBasePath = "$PSScriptRoot\modules"
-        }
-    }
-}
 
 function Test-Url {
     param (
@@ -63,31 +54,48 @@ function Test-Url {
     }
 }
 
-# Function to download modules
-function Download-Modules {
-    param (
-        [string]$scriptUrl = "https://raw.githubusercontent.com/aollivierre/module-starter/main/Clone-EnhancedRepos.ps1"
-    )
-    
-    try {
-        Write-Log "Validating URL: $scriptUrl" -Level "INFO"
 
-        # Validate the URL before proceeding
-        if (Test-Url -url $scriptUrl) {
-            Write-Log "Downloading and executing script from: $scriptUrl" -Level "INFO"
-            
-            # Download and execute the script from the URL
-            $scriptContent = Invoke-RestMethod -Uri $scriptUrl -UseBasicParsing
-            Invoke-Expression $scriptContent
-        }
-        else {
-            Write-Log "The URL $scriptUrl is not valid or accessible." -Level "ERROR"
-        }
+function Get-PowerShellPath {
+    if (Test-Path "C:\Program Files\PowerShell\7\pwsh.exe") {
+        return "C:\Program Files\PowerShell\7\pwsh.exe"
     }
-    catch {
-        Write-Log "Failed to download or execute the script from $scriptUrl" -Level "ERROR"
+    elseif (Test-Path "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe") {
+        return "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    }
+    else {
+        throw "Neither PowerShell 7 nor PowerShell 5 was found on this system."
     }
 }
+
+function Download-Modules {
+    param (
+        [array]$scriptDetails  # Array of script details, including URLs
+    )
+
+    $powerShellPath = Get-PowerShellPath
+    $processList = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
+
+    foreach ($scriptDetail in $scriptDetails) {
+        $url = $scriptDetail.Url
+
+        Write-Log "Validating URL: $url" -Level "INFO"
+
+        if (Test-Url -url $url) {
+            Write-Log "Running script from URL: $url" -Level "INFO"
+            $process = Start-Process -FilePath $powerShellPath -ArgumentList @("-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "Invoke-Expression (Invoke-RestMethod -Uri '$url')") -Verb RunAs -PassThru
+            $processList.Add($process)
+        }
+        else {
+            Write-Log "URL $url is not accessible" -Level "ERROR"
+        }
+    }
+
+    # Optionally wait for all processes to complete
+    foreach ($process in $processList) {
+        $process.WaitForExit()
+    }
+}
+
 
 # Function to handle Win32 apps
 function Handle-Win32Apps {
@@ -101,7 +109,25 @@ function Handle-Win32Apps {
     Write-Log "Win32Apps Repo Path: $global:Repo_winget" -Level "INFO"
 }
 
-# Function to import Enhanced modules directly within the script
+
+function Install-EnhancedModule {
+    param (
+        [string]$ModuleName
+    )
+
+    # Example: Logic to install the module (this might involve downloading and installing the module from a repository)
+    Write-Log "Installing module: $ModuleName" -Level "INFO"
+
+    # Replace this with the actual installation command for your environment
+    # Example using PowerShell Gallery (assuming modules are published there):
+    try {
+        Install-Module -Name $ModuleName -Force -Scope AllUsers
+    }
+    catch {
+        Write-Log "Failed to install module $ModuleName. Error: $_" -Level "ERROR"
+    }
+}
+
 function Import-EnhancedModules {
     $modulesToImport = @(
         "EnhancedAO.Graph.SignInLogs",
@@ -118,71 +144,157 @@ function Import-EnhancedModules {
     )
 
     foreach ($moduleName in $modulesToImport) {
+        if (-Not (Get-Module -ListAvailable -Name $moduleName)) {
+            Write-Log "Module $moduleName is not installed. Attempting to install..." -Level "INFO"
+            Install-EnhancedModule -ModuleName $moduleName
+        }
+
         Write-Log "Importing module: $moduleName" -Level "INFO"
-        Import-Module -Name $moduleName -Verbose -Force:$true -Global:$true
+        try {
+            Import-Module -Name $moduleName -Verbose -Force -Global
+        }
+        catch {
+            Write-Log "Failed to import module $moduleName. Error: $_" -Level "ERROR"
+        }
     }
 }
 
-# Modified Initialize-Environment function to include optional module import in prod mode
+
+function Setup-GlobalPaths {
+    param (
+        [string]$ScriptBasePath, # Path to the script base directory
+        [string]$ModulesBasePath       # Path to the modules directory
+    )
+
+    # Set the script base path and create if it doesn't exist
+    if (-Not (Test-Path $ScriptBasePath)) {
+        Write-Log "ScriptBasePath '$ScriptBasePath' does not exist. Creating directory..." -Level "INFO"
+        New-Item -Path $ScriptBasePath -ItemType Directory -Force
+    }
+    $global:scriptBasePath = $ScriptBasePath
+
+    # Set the modules base path and create if it doesn't exist
+    if (-Not (Test-Path $ModulesBasePath)) {
+        Write-Log "ModulesBasePath '$ModulesBasePath' does not exist. Creating directory..." -Level "INFO"
+        New-Item -Path $ModulesBasePath -ItemType Directory -Force
+    }
+    $global:modulesBasePath = $ModulesBasePath
+
+    # Log the paths for verification
+    Write-Log "Script Base Path: $global:scriptBasePath" -Level "INFO"
+    Write-Log "Modules Base Path: $global:modulesBasePath" -Level "INFO"
+}
+
 function Initialize-Environment {
     param (
-        [string]$Mode , # Accepts either 'dev' or 'prod'
-        [string]$WindowsModulePath,
-        [string]$ModulesPath , # Default path to modules
+        [string]$Mode, # Accepts either 'dev' or 'prod'
+        [string]$WindowsModulePath, # Path to the Windows module
+        [string]$ScriptBasePath, # Custom script base path
+        [string]$ModulesBasePath, # Custom modules base path
         [switch]$HandleWin32Apps = $false  # Optional switch to handle Win32 apps, turned off by default
     )
 
-    # Elevate to administrator if not already
-    if (-not (Test-Admin)) {
-        Write-Log "Restarting script with elevated permissions..."
-        $startProcessParams = @{
-            FilePath     = "powershell.exe"
-            ArgumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
-            Verb         = "RunAs"
-        }
-        Start-Process @startProcessParams
-        exit
-    }
-
-
-    Setup-GlobalPaths
-
+ 
     if ($Mode -eq "dev") {
-        if (-Not (Test-Path $ModulesPath)) {
-            Write-Log "Modules not found at $ModulesPath. Initiating download..." -Level "INFO"
-            Download-Modules
+
+        # Call Setup-GlobalPaths with custom paths
+        Setup-GlobalPaths -ScriptBasePath $ScriptBasePath -ModulesBasePath $ModulesBasePath
+        # Check if the directory exists and contains any files (not just the directory existence)
+        if (-Not (Test-Path "$global:modulesBasePath\*.*")) {
+            Write-Log "Modules not found or directory is empty at $global:modulesBasePath. Initiating download..." -Level "INFO"
+            Download-Modules -scriptDetails $scriptDetails
+
+            # Re-check after download attempt
+            if (-Not (Test-Path "$global:modulesBasePath\*.*")) {
+                throw "Download failed or the modules were not placed in the expected directory."
+            }
         }
         else {
-            Write-Log "Modules already exist at $ModulesPath" -Level "INFO"
+            Write-Log "Modules already exist at $global:modulesBasePath" -Level "INFO"
         }
+
+        # The following block will ONLY run in dev mode
+        # Construct the paths dynamically using the base paths
+    
+
+        $modulePath = Join-Path -Path $global:modulesBasePath -ChildPath $WindowsModulePath
+        $global:modulePath = $modulePath
+
+        # Re-check that the module exists before attempting to import
+        if (-Not (Test-Path $global:modulePath)) {
+            throw "The specified module '$global:modulePath' does not exist after download. Cannot import module."
+        }
+
+        # Import the module using the dynamically constructed path
+        Import-Module -Name $global:modulePath -Verbose -Force:$true -Global:$true
+
+        # Log the paths to verify
+        Write-Log "Module Path: $global:modulePath" -Level "INFO"
+
+        # Handle Win32 apps if the switch is specified
+        if ($HandleWin32Apps) {
+            Handle-Win32Apps
+        }
+
+        Write-Host "Starting to call Import-LatestModulesLocalRepository..."
+        Import-ModulesFromLocalRepository -ModulesFolderPath $global:modulesBasePath -ScriptPath $PSScriptRoot
     }
     elseif ($Mode -eq "prod") {
         Write-Log "Production mode selected. Importing modules..." -Level "INFO"
         Import-EnhancedModules
     }
-
-    # Construct the paths dynamically using the base paths
-    $modulePath = Join-Path -Path $global:modulesBasePath -ChildPath $WindowsModulePath
-    $global:modulePath = $modulePath
-
-    # Import the module using the dynamically constructed path
-    Import-Module -Name $global:modulePath -Verbose -Force:$true -Global:$true
-
-    # Log the paths to verify
-    Write-Log "Module Path: $global:modulePath" -Level "INFO"
-
-    # Handle Win32 apps if the switch is specified
-    if ($HandleWin32Apps) {
-        Handle-Win32Apps
-    }
 }
 
-# Example usage with splatting
+
+# Elevate to administrator if not already
+if (-not (Test-Admin)) {
+    Write-Log "Restarting script with elevated permissions..."
+    $startProcessParams = @{
+        FilePath     = "powershell.exe"
+        ArgumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
+        Verb         = "RunAs"
+    }
+    Start-Process @startProcessParams
+    exit
+}
+
+# Example usage of Initialize-Environment
 $initializeParams = @{
     Mode              = "dev"
-    ModulesPath       = "C:\code\modulesv2-beta1"  # Custom path
     WindowsModulePath = "EnhancedBoilerPlateAO\EnhancedBoilerPlateAO.psm1"
+    ScriptBasePath    = "$PSScriptRoot"          # Custom script base path
+    ModulesBasePath   = "C:\code\modulesv2" # Custom modules base path
     HandleWin32Apps   = $false
 }
 
 Initialize-Environment @initializeParams
+
+###############################################################################################################################
+############################################### END MODULE LOADING ############################################################
+###############################################################################################################################
+
+# Execute InstallAndImportModulesPSGallery function
+InstallAndImportModulesPSGallery -modulePsd1Path "$PSScriptRoot/modules.psd1"
+
+###############################################################################################################################
+############################################### END MODULE LOADING ############################################################
+###############################################################################################################################
+
+# Setup logging
+Write-EnhancedLog -Message "Script Started" -Level "INFO"
+
+################################################################################################################################
+################################################################################################################################
+################################################################################################################################
+
+
+# # ################################################################################################################################
+# # ############### CALLING AS SYSTEM to simulate Intune deployment as SYSTEM (Uncomment for debugging) ############################
+# # ################################################################################################################################
+
+# # Example usage
+# $privateFolderPath = Join-Path -Path $PSScriptRoot -ChildPath "private"
+# $PsExec64Path = Join-Path -Path $privateFolderPath -ChildPath "PsExec64.exe"
+# $ScriptToRunAsSystem = $MyInvocation.MyCommand.Path
+
+# Ensure-RunningAsSystem -PsExec64Path $PsExec64Path -ScriptPath $ScriptToRunAsSystem -TargetFolder $privateFolderPath
