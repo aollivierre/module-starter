@@ -260,7 +260,7 @@ if (-not (Test-Admin)) {
 
 # Example usage of Initialize-Environment
 $initializeParams = @{
-    Mode              = "dev"
+    Mode              = "prod"
     WindowsModulePath = "EnhancedBoilerPlateAO\EnhancedBoilerPlateAO.psm1"
     ScriptBasePath    = "$PSScriptRoot"          # Custom script base path
     ModulesBasePath   = "C:\code\modulesv2" # Custom modules base path
@@ -274,7 +274,18 @@ Initialize-Environment @initializeParams
 ###############################################################################################################################
 
 # Execute InstallAndImportModulesPSGallery function
-InstallAndImportModulesPSGallery -modulePsd1Path "$PSScriptRoot/modules.psd1"
+# InstallAndImportModulesPSGallery -modulePsd1Path "$PSScriptRoot/modules.psd1"
+
+# Example usage to download and use the PSD1 file from a GitHub repo
+$psd1Url = "https://raw.githubusercontent.com/aollivierre/module-starter/main/modules.psd1"
+$localPsd1Path = "$env:TEMP\modules.psd1"  # Save the PSD1 file to a temporary location
+
+# Download the PSD1 file
+Download-Psd1File -url $psd1Url -destinationPath $localPsd1Path
+
+# Call the function to install and import modules using the downloaded PSD1 file
+InstallAndImportModulesPSGallery -modulePsd1Path $localPsd1Path
+
 
 ###############################################################################################################################
 ############################################### END MODULE LOADING ############################################################
