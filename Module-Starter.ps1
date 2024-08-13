@@ -50,18 +50,42 @@ function Setup-GlobalPaths {
     }
 }
 
+function Test-Url {
+    param (
+        [string]$url
+    )
+    try {
+        Invoke-RestMethod -Uri $url -Method Head -ErrorAction Stop
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
 # Function to download modules
 function Download-Modules {
     param (
-        [string]$scriptPath = "C:\Code\CB\ModuleBuilder\GitHub\2-Clone-Modulesv2.ps1"
+        [string]$scriptUrl = "https://raw.githubusercontent.com/aollivierre/module-starter/main/Clone-EnhancedRepos.ps1"
     )
     
-    if (Test-Path $scriptPath) {
-        Write-Log "Executing script to download modules: $scriptPath" -Level "INFO"
-        & $scriptPath
+    try {
+        Write-Log "Validating URL: $scriptUrl" -Level "INFO"
+
+        # Validate the URL before proceeding
+        if (Test-Url -url $scriptUrl) {
+            Write-Log "Downloading and executing script from: $scriptUrl" -Level "INFO"
+            
+            # Download and execute the script from the URL
+            $scriptContent = Invoke-RestMethod -Uri $scriptUrl -UseBasicParsing
+            Invoke-Expression $scriptContent
+        }
+        else {
+            Write-Log "The URL $scriptUrl is not valid or accessible." -Level "ERROR"
+        }
     }
-    else {
-        Write-Log "Module download script not found at $scriptPath" -Level "ERROR"
+    catch {
+        Write-Log "Failed to download or execute the script from $scriptUrl" -Level "ERROR"
     }
 }
 
@@ -102,20 +126,34 @@ function Import-EnhancedModules {
 # Modified Initialize-Environment function to include optional module import in prod mode
 function Initialize-Environment {
     param (
-        [string]$Mode = "dev",  # Accepts either 'dev' or 'prod'
-        [string]$WindowsModulePath = "EnhancedBoilerPlateAO\2.0.0\EnhancedBoilerPlateAO.psm1",
+        [string]$Mode , # Accepts either 'dev' or 'prod'
+        [string]$WindowsModulePath,
+        [string]$ModulesPath , # Default path to modules
         [switch]$HandleWin32Apps = $false  # Optional switch to handle Win32 apps, turned off by default
     )
+
+    # Elevate to administrator if not already
+    if (-not (Test-Admin)) {
+        Write-Log "Restarting script with elevated permissions..."
+        $startProcessParams = @{
+            FilePath     = "powershell.exe"
+            ArgumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
+            Verb         = "RunAs"
+        }
+        Start-Process @startProcessParams
+        exit
+    }
+
 
     Setup-GlobalPaths
 
     if ($Mode -eq "dev") {
-        if (-Not (Test-Path "C:\code\modulesv2")) {
-            Write-Log "Modules not found at C:\code\modulesv2. Initiating download..." -Level "INFO"
+        if (-Not (Test-Path $ModulesPath)) {
+            Write-Log "Modules not found at $ModulesPath. Initiating download..." -Level "INFO"
             Download-Modules
         }
         else {
-            Write-Log "Modules already exist at C:\code\modulesv2" -Level "INFO"
+            Write-Log "Modules already exist at $ModulesPath" -Level "INFO"
         }
     }
     elseif ($Mode -eq "prod") {
@@ -139,5 +177,12 @@ function Initialize-Environment {
     }
 }
 
-# Example usage
-Initialize-Environment -Mode "dev"
+# Example usage with splatting
+$initializeParams = @{
+    Mode              = "dev"
+    ModulesPath       = "C:\code\modulesv2-beta1"  # Custom path
+    WindowsModulePath = "EnhancedBoilerPlateAO\EnhancedBoilerPlateAO.psm1"
+    HandleWin32Apps   = $false
+}
+
+Initialize-Environment @initializeParams

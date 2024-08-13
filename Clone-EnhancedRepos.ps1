@@ -1,156 +1,159 @@
-function Get-LatestGitHubCLIInstallerUrl {
-    <#
-    .SYNOPSIS
-    Gets the latest GitHub CLI Windows amd64 installer URL.
+# Initialize the global steps list
+$global:steps = [System.Collections.Generic.List[PSCustomObject]]::new()
+$global:currentStep = 0
+$processList = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
+$installationResults = [System.Collections.Generic.List[PSCustomObject]]::new()
 
-    .DESCRIPTION
-    This function retrieves the URL for the latest GitHub CLI Windows amd64 installer from the GitHub releases page.
+# Define the GitHub URLs of the scripts and corresponding software names
+$scriptDetails = @(
+    @{ Url = "https://raw.githubusercontent.com/aollivierre/setuplab/main/Install-Git.ps1"; SoftwareName = "Git"; MinVersion = [version]"2.41.0.0" },
+    @{ Url = "https://raw.githubusercontent.com/aollivierre/setuplab/main/Install-GitHubCLI.ps1"; SoftwareName = "GitHub CLI"; MinVersion = [version]"2.54.0" }
 
-    .PARAMETER releasesUrl
-    The URL for the GitHub CLI releases page.
+)
 
-    .EXAMPLE
-    Get-LatestGitHubCLIInstallerUrl -releasesUrl "https://api.github.com/repos/cli/cli/releases/latest"
-    Retrieves the latest GitHub CLI Windows amd64 installer URL.
 
-    .NOTES
-    This function requires an internet connection to access the GitHub API.
-    #>
+function Test-Admin {
+    $currentUser = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+    return $currentUser.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
 
-    [CmdletBinding()]
+# Function to add a step
+function Add-Step {
     param (
-        [Parameter(Mandatory = $true)]
-        [string]$releasesUrl
+        [string]$description
     )
+    $global:steps.Add([PSCustomObject]@{ Description = $description })
+}
 
-    begin {
-        Write-Host -Message "Starting Get-LatestGitHubCLIInstallerUrl function" -Level "Notice"
-        # Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
+# Function to log the current step
+function Log-Step {
+    $global:currentStep++
+    $totalSteps = $global:steps.Count
+    $stepDescription = $global:steps[$global:currentStep - 1].Description
+    Write-Host "Step [$global:currentStep/$totalSteps]: $stepDescription" -ForegroundColor Cyan
+}
+
+# Function for logging with color coding
+function Write-Log {
+    param (
+        [string]$Message,
+        [string]$Level = "INFO"
+    )
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logMessage = "[$timestamp] [$Level] $Message"
+    
+    switch ($Level) {
+        "INFO" { Write-Host $logMessage -ForegroundColor Green }
+        "ERROR" { Write-Host $logMessage -ForegroundColor Red }
+        "WARNING" { Write-Host $logMessage -ForegroundColor Yellow }
+        default { Write-Host $logMessage -ForegroundColor White }
     }
 
-    process {
-        try {
-            $headers = @{
-                "User-Agent" = "Mozilla/5.0"
-            }
+    # Append to log file
+    $logFilePath = [System.IO.Path]::Combine($env:TEMP, 'install-scripts.log')
+    $logMessage | Out-File -FilePath $logFilePath -Append -Encoding utf8
+}
 
-            $response = Invoke-RestMethod -Uri $releasesUrl -Headers $headers
-
-            foreach ($asset in $response.assets) {
-                if ($asset.name -match "windows_amd64.msi") {
-                    return $asset.browser_download_url
-                }
-            }
-
-            throw "Windows amd64 installer not found."
-        } catch {
-            Write-Host -Message "Error retrieving installer URL: $_" -Level "ERROR"
-            # Handle-Error -ErrorRecord $_
-            throw $_
-        }
+# Function to validate URL
+function Test-Url {
+    param (
+        [string]$url
+    )
+    try {
+        Invoke-RestMethod -Uri $url -Method Head -ErrorAction Stop
+        return $true
     }
-
-    end {
-        Write-Host -Message "Get-LatestGitHubCLIInstallerUrl function execution completed." -Level "Notice"
+    catch {
+        return $false
     }
 }
 
-function Install-GitHubCLI {
-    <#
-    .SYNOPSIS
-    Installs the GitHub CLI on Windows.
+# Function to get PowerShell path
+function Get-PowerShellPath {
+    if (Test-Path "C:\Program Files\PowerShell\7\pwsh.exe") {
+        return "C:\Program Files\PowerShell\7\pwsh.exe"
+    }
+    elseif (Test-Path "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe") {
+        return "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    }
+    else {
+        throw "Neither PowerShell 7 nor PowerShell 5 was found on this system."
+    }
+}
 
-    .DESCRIPTION
-    This function downloads the latest GitHub CLI Windows amd64 installer and installs it silently. It also verifies the installation in a new PowerShell session.
 
-    .PARAMETER releasesUrl
-    The URL for the GitHub CLI releases page.
-
-    .PARAMETER installerPath
-    The local path to save the installer.
-
-    .EXAMPLE
-    Install-GitHubCLI -releasesUrl "https://api.github.com/repos/cli/cli/releases/latest" -installerPath "$env:TEMP\gh_cli_installer.msi"
-    Downloads and installs the latest GitHub CLI.
-
-    .NOTES
-    This function requires administrative privileges to run the installer.
-    #>
-
-    [CmdletBinding()]
+# Function to validate software installation via registry with retry mechanism
+function Validate-Installation {
     param (
-        [Parameter(Mandatory = $true)]
-        [string]$releasesUrl,
-        [Parameter(Mandatory = $true)]
-        [string]$installerPath
+        [string]$SoftwareName,
+        [version]$MinVersion = [version]"0.0.0.0",
+        [string]$RegistryPath = "",
+        [int]$MaxRetries = 3,
+        [int]$DelayBetweenRetries = 5  # Delay in seconds
     )
 
-    begin {
-        Write-Host -Message "Starting Install-GitHubCLI function" -Level "Notice"
-        # Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
-    }
 
-    process {
-        try {
-            # Get the latest installer URL
-            $installerUrl = Get-LatestGitHubCLIInstallerUrl -releasesUrl $releasesUrl
+    # if ($SoftwareName -eq "Windows Terminal") {
+    #     return @{ IsInstalled = $false }  # Force the Windows Terminal script to always run as it will handle its own validation logic
+    # }
 
-            # Download the installer
-            Write-Host -Message "Downloading GitHub CLI installer from $installerUrl..." -Level "INFO"
-            Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
+    $retryCount = 0
+    $validationSucceeded = $false
 
-            # Install the GitHub CLI
-            Write-Host -Message "Running the GitHub CLI installer..." -Level "INFO"
-            $msiArgs = @(
-                "/i"
-                $installerPath
-                "/quiet"
-                "/norestart"
-            )
-            Start-Process msiexec.exe -ArgumentList $msiArgs -NoNewWindow -Wait
+    while ($retryCount -lt $MaxRetries -and -not $validationSucceeded) {
+        $registryPaths = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall"  # Include HKCU for user-installed apps
+        )
 
-            # Verify the installation in a new PowerShell session
-            Write-Host -Message "Verifying the GitHub CLI installation in a new PowerShell session..." -Level "INFO"
-            $verifyScript = {
-                try {
-                    $version = gh --version
-                    if ($version) {
-                        $verificationResult = "GitHub CLI installed successfully. Version: $version"
-                    } else {
-                        $verificationResult = "GitHub CLI installation failed."
+        if ($RegistryPath) {
+            # If a specific registry path is provided, check only that path
+            if (Test-Path $RegistryPath) {
+                $app = Get-ItemProperty -Path $RegistryPath -ErrorAction SilentlyContinue
+                if ($app -and $app.DisplayName -like "*$SoftwareName*") {
+                    $installedVersion = [version]$app.DisplayVersion
+                    if ($installedVersion -ge $MinVersion) {
+                        $validationSucceeded = $true
+                        return @{
+                            IsInstalled = $true
+                            Version     = $installedVersion
+                            ProductCode = $app.PSChildName
+                        }
                     }
-                } catch {
-                    $verificationResult = "Error verifying GitHub CLI installation: $_"
                 }
-                return $verificationResult
             }
-            $verificationResult = powershell -Command $verifyScript
-            Write-Host -Message $verificationResult -Level "INFO"
-        } catch {
-            Write-Host -Message "Error during GitHub CLI installation: $_" -Level "ERROR"
-            # Handle-Error -ErrorRecord $_
-            throw $_
+        }
+        else {
+            # If no specific registry path, check standard locations
+            foreach ($path in $registryPaths) {
+                $items = Get-ChildItem -Path $path -ErrorAction SilentlyContinue
+                foreach ($item in $items) {
+                    $app = Get-ItemProperty -Path $item.PsPath -ErrorAction SilentlyContinue
+                    if ($app.DisplayName -like "*$SoftwareName*") {
+                        $installedVersion = [version]$app.DisplayVersion
+                        if ($installedVersion -ge $MinVersion) {
+                            $validationSucceeded = $true
+                            return @{
+                                IsInstalled = $true
+                                Version     = $installedVersion
+                                ProductCode = $app.PSChildName
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        $retryCount++
+        if (-not $validationSucceeded) {
+            Write-Log "Validation attempt $retryCount failed: $SoftwareName not found or version does not meet minimum requirements. Retrying in $DelayBetweenRetries seconds..." -Level "WARNING"
+            Start-Sleep -Seconds $DelayBetweenRetries
         }
     }
 
-    end {
-        Write-Host -Message "Install-GitHubCLI function execution completed." -Level "Notice"
-    }
+    return @{IsInstalled = $false }
 }
-
-
-
-
-# Define the URL for the GitHub CLI releases page
-$githubCLIReleasesUrl = "https://api.github.com/repos/cli/cli/releases/latest"
-
-# Define the local path to save the installer
-$installerPath = "$env:TEMP\gh_cli_installer.msi"
-
-# Example invocation to install GitHub CLI:
-Install-GitHubCLI -releasesUrl $githubCLIReleasesUrl -installerPath $installerPath
-
-
 
 
 function Clone-EnhancedRepos {
@@ -168,7 +171,7 @@ function Clone-EnhancedRepos {
     The directory to clone the repositories into.
 
     .EXAMPLE
-    Clone-EnhancedRepos -githubUsername "aollivierre" -targetDirectory "C:\Code\modules-beta3"
+    Clone-EnhancedRepos -githubUsername "aollivierre" -targetDirectory "C:\Code\modules-beta4"
     Clones all repositories starting with "Enhanced" from the specified GitHub account to the target directory.
 
     .NOTES
@@ -181,25 +184,24 @@ function Clone-EnhancedRepos {
         [string]$githubUsername,
 
         [Parameter(Mandatory = $true)]
-        [string]$targetDirectory = "C:\Code\modules-beta3"
+        [string]$targetDirectory = "C:\Code\modules-beta4"
     )
 
     begin {
-        Write-Host -Message "Starting Clone-EnhancedRepos function" -Level "INFO"
-        # Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
+        Write-Log -Message "Starting Clone-EnhancedRepos function" -Level "Notice"
 
         # Create the target directory if it doesn't exist
         if (-not (Test-Path -Path $targetDirectory)) {
-            Write-Host -Message "Creating target directory: $targetDirectory" -Level "INFO"
+            Write-Log -Message "Creating target directory: $targetDirectory" -Level "INFO"
             New-Item -Path $targetDirectory -ItemType Directory
         }
     }
 
     process {
         try {
-            # Get the list of repositories using GitHub CLI
-            Write-Host -Message "Retrieving repositories for user $githubUsername using GitHub CLI..." -Level "INFO"
-            $reposJson = gh repo list $githubUsername --json name,url --jq '.[] | select(.name | startswith("Enhanced"))'
+            # Get the list of repositories using the full path to GitHub CLI
+            Write-Log -Message "Retrieving repositories for user $githubUsername using GitHub CLI..." -Level "INFO"
+            $reposJson = & "C:\Program Files\GitHub CLI\gh.exe" repo list $githubUsername --json name,url --jq '.[] | select(.name | startswith("Enhanced"))'
             $repos = $reposJson | ConvertFrom-Json
 
             # Clone each repository
@@ -208,22 +210,144 @@ function Clone-EnhancedRepos {
                 $repoCloneUrl = $repo.url
                 $repoTargetPath = Join-Path -Path $targetDirectory -ChildPath $repoName
 
-                Write-Host -Message "Cloning repository $repoName to $repoTargetPath..." -Level "INFO"
+                Write-Log -Message "Cloning repository $repoName to $repoTargetPath..." -Level "INFO"
                 git clone $repoCloneUrl $repoTargetPath
             }
 
-            Write-Host -Message "Cloning process completed." -Level "INFO"
+            Write-Log -Message "Cloning process completed." -Level "INFO"
         } catch {
-            Write-Host -Message "Error during cloning process: $_" -Level "ERROR"
-            # Handle-Error -ErrorRecord $_
+            Write-Log -Message "Error during cloning process: $_" -Level "ERROR"
             throw $_
         }
     }
 
     end {
-        Write-Host -Message "Clone-EnhancedRepos function execution completed." -Level "INFO"
+        Write-Log -Message "Clone-EnhancedRepos function execution completed." -Level "Notice"
     }
 }
 
-# Example invocation to clone repositories:
-Clone-EnhancedRepos -githubUsername "aollivierre" -targetDirectory "C:\Code\modules-beta3"
+
+
+# Add steps for each script
+foreach ($detail in $scriptDetails) {
+    Add-Step ("Running script from URL: $($detail.Url)")
+}
+
+# Main script execution with try-catch for error handling
+try {
+
+    # Elevate to administrator if not already
+    if (-not (Test-Admin)) {
+        Write-Log "Restarting script with elevated permissions..."
+        $startProcessParams = @{
+            FilePath     = "powershell.exe"
+            ArgumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
+            Verb         = "RunAs"
+        }
+        Start-Process @startProcessParams
+        exit
+    }
+    
+
+    $powerShellPath = Get-PowerShellPath
+
+    foreach ($detail in $scriptDetails) {
+        $url = $detail.Url
+        $softwareName = $detail.SoftwareName
+        $minVersion = $detail.MinVersion
+        $registryPath = $detail.RegistryPath  # Directly extract RegistryPath
+
+        # Validate before running the installation script
+        Write-Log "Validating existing installation of $softwareName..."
+
+        # Pass RegistryPath if it's available
+        $installationCheck = if ($registryPath) {
+            Validate-Installation -SoftwareName $softwareName -MinVersion $minVersion -MaxRetries 3 -DelayBetweenRetries 5 -RegistryPath $registryPath
+        }
+        else {
+            Validate-Installation -SoftwareName $softwareName -MinVersion $minVersion -MaxRetries 3 -DelayBetweenRetries 5
+        }
+
+        if ($installationCheck.IsInstalled) {
+            Write-Log "$softwareName version $($installationCheck.Version) is already installed. Skipping installation." -Level "INFO"
+            $installationResults.Add([pscustomobject]@{ SoftwareName = $softwareName; Status = "Already Installed"; VersionFound = $installationCheck.Version })
+        }
+        else {
+            if (Test-Url -url $url) {
+                Log-Step
+                Write-Log "Running script from URL: $url" -Level "INFO"
+                $process = Start-Process -FilePath $powerShellPath -ArgumentList @("-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "Invoke-Expression (Invoke-RestMethod -Uri '$url')") -Verb RunAs -PassThru
+                $processList.Add($process)
+
+                $installationResults.Add([pscustomobject]@{ SoftwareName = $softwareName; Status = "Installed"; VersionFound = "N/A" })
+            }
+            else {
+                Write-Log "URL $url is not accessible" -Level "ERROR"
+                $installationResults.Add([pscustomobject]@{ SoftwareName = $softwareName; Status = "Failed - URL Not Accessible"; VersionFound = "N/A" })
+            }
+        }
+    }
+
+    # Wait for all processes to complete
+    foreach ($process in $processList) {
+        $process.WaitForExit()
+    }
+
+    # Post-installation validation
+    foreach ($result in $installationResults) {
+        if ($result.Status -eq "Installed") {
+            if ($result.SoftwareName -in @("RDP", "Windows Terminal")) {
+                Write-Log "Skipping post-installation validation for $($result.SoftwareName)." -Level "INFO"
+                $result.Status = "Successfully Installed"
+                continue
+            }
+
+            Write-Log "Validating installation of $($result.SoftwareName)..."
+            $validationResult = Validate-Installation -SoftwareName $result.SoftwareName -MinVersion ($scriptDetails | Where-Object { $_.SoftwareName -eq $result.SoftwareName }).MinVersion
+
+            if ($validationResult.IsInstalled) {
+                Write-Log "Validation successful: $($result.SoftwareName) version $($validationResult.Version) is installed." -Level "INFO"
+                $result.VersionFound = $validationResult.Version
+                $result.Status = "Successfully Installed"
+            }
+            else {
+                Write-Log "Validation failed: $($result.SoftwareName) was not found on the system." -Level "ERROR"
+                $result.Status = "Failed - Not Found After Installation"
+            }
+        }
+    }
+
+
+    # Summary report
+    $totalSoftware = $installationResults.Count
+    $successfulInstallations = $installationResults | Where-Object { $_.Status -eq "Successfully Installed" }
+    $alreadyInstalled = $installationResults | Where-Object { $_.Status -eq "Already Installed" }
+    $failedInstallations = $installationResults | Where-Object { $_.Status -like "Failed*" }
+
+    Write-Host "Total Software: $totalSoftware" -ForegroundColor Cyan
+    Write-Host "Successful Installations: $($successfulInstallations.Count)" -ForegroundColor Green
+    Write-Host "Already Installed: $($alreadyInstalled.Count)" -ForegroundColor Yellow
+    Write-Host "Failed Installations: $($failedInstallations.Count)" -ForegroundColor Red
+
+    # Detailed Summary
+    Write-Host "`nDetailed Summary:" -ForegroundColor Cyan
+    $installationResults | ForEach-Object {
+        Write-Host "Software: $($_.SoftwareName)" -ForegroundColor White
+        Write-Host "Status: $($_.Status)" -ForegroundColor White
+        Write-Host "Version Found: $($_.VersionFound)" -ForegroundColor White
+        Write-Host "----------------------------------------" -ForegroundColor Gray
+    }
+
+    # Example invocation to clone repositories:
+    Clone-EnhancedRepos -githubUsername "aollivierre" -targetDirectory "C:\Code\modulesv2"
+
+}
+catch {
+    # Capture the error details
+    $errorDetails = $_ | Out-String
+    Write-Log "An error occurred: $errorDetails" -Level "ERROR"
+    throw
+}
+
+# Keep the PowerShell window open to review the logs
+Read-Host 'Press Enter to close this window...'
