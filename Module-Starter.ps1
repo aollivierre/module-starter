@@ -115,11 +115,9 @@ function Install-EnhancedModule {
         [string]$ModuleName
     )
 
-    # Example: Logic to install the module (this might involve downloading and installing the module from a repository)
+    # Logic to install the module
     Write-Log "Installing module: $ModuleName" -Level "INFO"
 
-    # Replace this with the actual installation command for your environment
-    # Example using PowerShell Gallery (assuming modules are published there):
     try {
         Install-Module -Name $ModuleName -Force -Scope AllUsers
     }
@@ -129,22 +127,22 @@ function Install-EnhancedModule {
 }
 
 function Import-EnhancedModules {
-    $modulesToImport = @(
-        "EnhancedAO.Graph.SignInLogs",
-        "EnhancedDeviceMigrationAO",
-        "EnhancedFileManagerAO",
-        "EnhancedGraphAO",
-        "EnhancedHyperVAO",
-        "EnhancedLoggingAO",
-        "EnhancedPSADTAO",
-        "EnhancedSchedTaskAO",
-        "EnhancedSPOAO",
-        "EnhancedVPNAO",
-        "EnhancedWin32DeployerAO"
+    param (
+        [string]$modulePsd1Path  # Path to the PSD1 file containing the list of modules to install and import
     )
 
+    # Validate PSD1 file path
+    if (-not (Test-Path -Path $modulePsd1Path)) {
+        Write-Log "modules.psd1 file not found at path: $modulePsd1Path" -Level "ERROR"
+        throw "modules.psd1 file not found."
+    }
+
+    # Import the PSD1 data
+    $moduleData = Import-PowerShellDataFile -Path $modulePsd1Path
+    $modulesToImport = $moduleData.requiredModules
+
     foreach ($moduleName in $modulesToImport) {
-        if (-Not (Get-Module -ListAvailable -Name $moduleName)) {
+        if (-not (Get-Module -ListAvailable -Name $moduleName)) {
             Write-Log "Module $moduleName is not installed. Attempting to install..." -Level "INFO"
             Install-EnhancedModule -ModuleName $moduleName
         }
@@ -158,7 +156,6 @@ function Import-EnhancedModules {
         }
     }
 }
-
 
 function Setup-GlobalPaths {
     param (
@@ -241,7 +238,19 @@ function Initialize-Environment {
     }
     elseif ($Mode -eq "prod") {
         Write-Log "Production mode selected. Importing modules..." -Level "INFO"
-        Import-EnhancedModules
+        # Import-EnhancedModules
+
+        $psd1Url = "https://raw.githubusercontent.com/aollivierre/module-starter/main/enhanced-modules.psd1"
+        $localPsd1Path = "$env:TEMP\enhanced-modules.psd1"
+
+        # Download the PSD1 file
+        Download-Psd1File -url $psd1Url -destinationPath $localPsd1Path
+
+        # Install and import modules based on the PSD1 file
+        Import-EnhancedModules -modulePsd1Path $localPsd1Path
+
+
+
     }
 }
 
