@@ -257,7 +257,7 @@ function Initialize-Environment {
             }
         }
         else {
-            Write-Log "Modules already exist at $global:modulesBasePath" -Level "INFO"
+            Write-Log "Source Modules already exist at $global:modulesBasePath" -Level "INFO"
         }
 
         # The following block will ONLY run in dev mode
