@@ -104,6 +104,18 @@ function Download-Modules {
 }
 
 
+# Function to handle Win32 apps
+function Handle-Win32Apps {
+    Write-Log "Handling Win32 Apps..." -Level "INFO"
+    $global:AOscriptDirectory = Join-Path -Path $global:scriptBasePath -ChildPath "Win32Apps-DropBox"
+    $global:directoryPath = Join-Path -Path $global:scriptBasePath -ChildPath "Win32Apps-DropBox"
+    $global:Repo_Path = $global:scriptBasePath
+    $global:Repo_winget = "$Repo_Path\Win32Apps-DropBox"
+    
+    Write-Log "Win32Apps Directory: $global:directoryPath" -Level "INFO"
+    Write-Log "Win32Apps Repo Path: $global:Repo_winget" -Level "INFO"
+}
+
 
 function Install-EnhancedModule {
     param (
@@ -154,8 +166,16 @@ function Import-EnhancedModules {
 
 function Setup-GlobalPaths {
     param (
+        [string]$ScriptBasePath, # Path to the script base directory
         [string]$ModulesBasePath       # Path to the modules directory
     )
+
+    # Set the script base path and create if it doesn't exist
+    if (-Not (Test-Path $ScriptBasePath)) {
+        Write-Log "ScriptBasePath '$ScriptBasePath' does not exist. Creating directory..." -Level "INFO"
+        New-Item -Path $ScriptBasePath -ItemType Directory -Force
+    }
+    $global:scriptBasePath = $ScriptBasePath
 
     # Set the modules base path and create if it doesn't exist
     if (-Not (Test-Path $ModulesBasePath)) {
@@ -165,6 +185,7 @@ function Setup-GlobalPaths {
     $global:modulesBasePath = $ModulesBasePath
 
     # Log the paths for verification
+    Write-Log "Script Base Path: $global:scriptBasePath" -Level "INFO"
     Write-Log "Modules Base Path: $global:modulesBasePath" -Level "INFO"
 }
 
@@ -238,14 +259,16 @@ function Initialize-Environment {
     param (
         [string]$Mode, # Accepts either 'dev' or 'prod'
         [string]$WindowsModulePath, # Path to the Windows module
-        [string]$ModulesBasePath # Custom modules base path
+        [string]$ScriptBasePath, # Custom script base path
+        [string]$ModulesBasePath, # Custom modules base path
+        [switch]$HandleWin32Apps = $false  # Optional switch to handle Win32 apps, turned off by default
     )
 
  
     if ($Mode -eq "dev") {
 
         # Call Setup-GlobalPaths with custom paths
-        Setup-GlobalPaths -ModulesBasePath $ModulesBasePath
+        Setup-GlobalPaths -ScriptBasePath $ScriptBasePath -ModulesBasePath $ModulesBasePath
         # Check if the directory exists and contains any files (not just the directory existence)
         if (-Not (Test-Path "$global:modulesBasePath\*.*")) {
             Write-Log "Modules not found or directory is empty at $global:modulesBasePath. Initiating download..." -Level "INFO"
@@ -277,6 +300,11 @@ function Initialize-Environment {
 
         # Log the paths to verify
         Write-Log "Module Path: $global:modulePath" -Level "INFO"
+
+        # Handle Win32 apps if the switch is specified
+        if ($HandleWin32Apps) {
+            Handle-Win32Apps
+        }
 
         Write-Host "Starting to call Import-LatestModulesLocalRepository..."
         Import-ModulesFromLocalRepository -ModulesFolderPath $global:modulesBasePath -ScriptPath $PSScriptRoot
@@ -314,7 +342,9 @@ if (-not (Test-Admin)) {
 $initializeParams = @{
     Mode              = $Mode
     WindowsModulePath = "EnhancedBoilerPlateAO\EnhancedBoilerPlateAO.psm1"
+    ScriptBasePath    = "$env:APPDATA\IntuneWin32Deployer"  # Use AppData as the script base path
     ModulesBasePath   = "C:\code\modulesv2" # Custom modules base path
+    HandleWin32Apps   = $false
 }
 
 Initialize-Environment @initializeParams
