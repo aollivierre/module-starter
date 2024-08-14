@@ -262,7 +262,6 @@ function Initialize-Environment {
 
         # The following block will ONLY run in dev mode
         # Construct the paths dynamically using the base paths
-    
 
         $modulePath = Join-Path -Path $global:modulesBasePath -ChildPath $WindowsModulePath
         $global:modulePath = $modulePath
@@ -279,7 +278,7 @@ function Initialize-Environment {
         Write-Log "Module Path: $global:modulePath" -Level "INFO"
 
         Write-Host "Starting to call Import-LatestModulesLocalRepository..."
-        Import-ModulesFromLocalRepository -ModulesFolderPath $global:modulesBasePath -ScriptPath $PSScriptRoot
+        Import-ModulesFromLocalRepository -ModulesFolderPath $global:modulesBasePath
     }
     elseif ($Mode -eq "prod") {
         Write-Log "Production mode selected. Importing modules..." -Level "INFO"
