@@ -216,34 +216,34 @@ function Download-Psd1File {
     )
 
     begin {
-        Write-EnhancedLog -Message "Starting Download-Psd1File function" -Level "NOTICE"
+        Write-Log -Message "Starting Download-Psd1File function" -Level "NOTICE"
         Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
 
         # Validate destination directory
         $destinationDirectory = [System.IO.Path]::GetDirectoryName($destinationPath)
         if (-not (Test-Path -Path $destinationDirectory)) {
-            Write-EnhancedLog -Message "Destination directory not found at path: $destinationDirectory" -Level "ERROR"
+            Write-Log -Message "Destination directory not found at path: $destinationDirectory" -Level "ERROR"
             throw "Destination directory not found."
         }
 
-        Write-EnhancedLog -Message "Validated destination directory at path: $destinationDirectory" -Level "INFO"
+        Write-Log -Message "Validated destination directory at path: $destinationDirectory" -Level "INFO"
     }
 
     process {
         try {
-            Write-EnhancedLog -Message "Downloading PSD1 file from URL: $url" -Level "INFO"
+            Write-Log -Message "Downloading PSD1 file from URL: $url" -Level "INFO"
             Invoke-WebRequest -Uri $url -OutFile $destinationPath -UseBasicParsing
-            Write-EnhancedLog -Message "Downloaded PSD1 file to: $destinationPath" -Level "INFO"
+            Write-Log -Message "Downloaded PSD1 file to: $destinationPath" -Level "INFO"
         }
         catch {
-            Write-EnhancedLog -Message "Failed to download PSD1 file from $url. Error: $_" -Level "ERROR"
+            Write-Log -Message "Failed to download PSD1 file from $url. Error: $_" -Level "ERROR"
             Handle-Error -ErrorRecord $_
             throw $_
         }
     }
 
     end {
-        Write-EnhancedLog -Message "Download-Psd1File function execution completed." -Level "NOTICE"
+        Write-Log -Message "Download-Psd1File function execution completed." -Level "NOTICE"
     }
 }
 
