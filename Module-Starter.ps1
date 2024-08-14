@@ -340,7 +340,7 @@ if (-not (Test-Admin)) {
 
 # Example usage of Initialize-Environment
 $initializeParams = @{
-    Mode              = "prod"
+    Mode              = $Mode
     WindowsModulePath = "EnhancedBoilerPlateAO\EnhancedBoilerPlateAO.psm1"
     ScriptBasePath    = "$PSScriptRoot"          # Custom script base path
     ModulesBasePath   = "C:\code\modulesv2" # Custom modules base path

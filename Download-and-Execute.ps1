@@ -49,4 +49,19 @@
 # iex ((irm "https://raw.githubusercontent.com/aollivierre/module-starter/main/example-script.ps1") -replace '\[string\]\$Mode = "default"', '[string]$Mode = "dev"')
 
 
-iex ((irm "https://raw.githubusercontent.com/aollivierre/module-starter/main/Module-Starter.ps1") -replace '\[string\]\$Mode = "dev"', '[string]$Mode = "dev"')
+# iex ((irm "https://raw.githubusercontent.com/aollivierre/module-starter/main/Module-Starter.ps1") -replace '\[string\]\$Mode = "dev"', '[string]$Mode = "prod"')
+
+
+
+# iex ((irm "https://raw.githubusercontent.com/aollivierre/module-starter/main/example-script.ps1") -replace '\$Mode = "default"', '$Mode = "dev"')
+
+
+# iex ((irm "https://raw.githubusercontent.com/aollivierre/module-starter/main/example-script.ps1") -replace 'default', 'dev')
+
+# iex ((irm "https://raw.githubusercontent.com/aollivierre/module-starter/main/Module-Starter.ps1"))
+
+
+
+# iex ((irm "https://raw.githubusercontent.com/aollivierre/module-starter/main/example-script.ps1") -replace '\$Mode = "dev"', '$Mode = "prod"')
+
+iex (irm "https://raw.githubusercontent.com/aollivierre/module-starter/main/Module-Starter.ps1")
