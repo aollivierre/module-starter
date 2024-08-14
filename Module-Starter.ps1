@@ -1,3 +1,10 @@
+param (
+    [string]$Mode = "dev"
+)
+
+Write-Host "The script is running in mode: $Mode"
+
+
 $processList = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
 $scriptDetails = @(
     @{ Url = "https://raw.githubusercontent.com/aollivierre/module-starter/main/Clone-EnhancedRepos.ps1" }
