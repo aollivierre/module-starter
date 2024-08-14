@@ -224,7 +224,7 @@ function Download-Psd1File {
 
     begin {
         Write-Log -Message "Starting Download-Psd1File function" -Level "NOTICE"
-        Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
+        # Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
 
         # Validate destination directory
         $destinationDirectory = [System.IO.Path]::GetDirectoryName($destinationPath)
