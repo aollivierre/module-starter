@@ -11,9 +11,92 @@ $scriptDetails = @(
 )
 
 # Function to test if the script is running as an administrator
-function Test-Admin {
-    $currentUser = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-    return $currentUser.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+function CheckAndElevate {
+    <#
+    .SYNOPSIS
+    Checks if the script is running with administrative privileges and optionally elevates it if not.
+
+    .DESCRIPTION
+    The CheckAndElevate function checks whether the current PowerShell session is running with administrative privileges. 
+    It can either return the administrative status or attempt to elevate the script if it is not running as an administrator.
+
+    .PARAMETER ElevateIfNotAdmin
+    If set to $true, the function will attempt to elevate the script if it is not running with administrative privileges. 
+    If set to $false, the function will simply return the administrative status without taking any action.
+
+    .EXAMPLE
+    CheckAndElevate -ElevateIfNotAdmin $true
+
+    Checks the current session for administrative privileges and elevates if necessary.
+
+    .EXAMPLE
+    $isAdmin = CheckAndElevate -ElevateIfNotAdmin $false
+    if (-not $isAdmin) {
+        Write-Host "The script is not running with administrative privileges."
+    }
+
+    Checks the current session for administrative privileges and returns the status without elevating.
+    
+    .NOTES
+    If the script is elevated, it will restart with administrative privileges. Ensure that any state or data required after elevation is managed appropriately.
+    #>
+
+    [CmdletBinding()]
+    param (
+        [bool]$ElevateIfNotAdmin = $true
+    )
+
+    Begin {
+        Write-Log -Message "Starting CheckAndElevate function" -Level "NOTICE"
+
+        # Use .NET classes for efficiency
+        try {
+            $isAdmin = [System.Security.Principal.WindowsPrincipal]::new([System.Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+            Write-Log -Message "Checking for administrative privileges..." -Level "INFO"
+        }
+        catch {
+            Write-Log -Message "Error determining administrative status: $($_.Exception.Message)" -Level "ERROR"
+            Handle-Error -ErrorRecord $_
+            throw $_
+        }
+    }
+
+    Process {
+        if (-not $isAdmin) {
+            if ($ElevateIfNotAdmin) {
+                try {
+                    Write-Log -Message "The script is not running with administrative privileges. Attempting to elevate..." -Level "WARNING"
+
+                    $powerShellPath = Get-PowerShellPath
+                    $startProcessParams = @{
+                        FilePath     = $powerShellPath
+                        ArgumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"")
+                        Verb         = "RunAs"
+                    }
+                    Start-Process @startProcessParams
+
+                    Write-Log -Message "Script re-launched with administrative privileges. Exiting current session." -Level "INFO"
+                    exit
+                }
+                catch {
+                    Write-Log -Message "Failed to elevate privileges: $($_.Exception.Message)" -Level "ERROR"
+                    Handle-Error -ErrorRecord $_
+                    throw $_
+                }
+            }
+            else {
+                Write-Log -Message "The script is not running with administrative privileges and will continue without elevation." -Level "INFO"
+            }
+        }
+        else {
+            Write-Log -Message "Script is already running with administrative privileges." -Level "INFO"
+        }
+    }
+
+    End {
+        Write-Log -Message "Exiting CheckAndElevate function" -Level "NOTICE"
+        return $isAdmin
+    }
 }
 
 # Function for logging with color coding
@@ -61,39 +144,235 @@ function Test-Url {
     }
 }
 
+function Invoke-WebScript {
+    param (
+        [string]$url
+    )
 
-function Get-PowerShellPath {
-    if (Test-Path "C:\Program Files\PowerShell\7\pwsh.exe") {
-        return "C:\Program Files\PowerShell\7\pwsh.exe"
-    }
-    elseif (Test-Path "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe") {
-        return "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    $powerShellPath = Get-PowerShellPath
+
+    Write-Log "Validating URL: $url" -Level "INFO"
+
+    if (Test-Url -url $url) {
+        Write-Log "Running script from URL: $url" -Level "INFO"
+
+        $startProcessParams = @{
+            FilePath     = $powerShellPath
+            ArgumentList = @("-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "Invoke-Expression (Invoke-RestMethod -Uri '$url')")
+            Verb         = "RunAs"
+            PassThru     = $true
+        }
+
+        $process = Start-Process @startProcessParams
+        return $process
     }
     else {
-        throw "Neither PowerShell 7 nor PowerShell 5 was found on this system."
+        Write-Log "URL $url is not accessible" -Level "ERROR"
+        return $null
     }
 }
+
+function Validate-SoftwareInstallation {
+    [CmdletBinding()]
+    param (
+        [string]$SoftwareName,
+        [version]$MinVersion = [version]"0.0.0.0",
+        [string]$RegistryPath = "",
+        [string]$ExePath = "",
+        [int]$MaxRetries = 3,
+        [int]$DelayBetweenRetries = 5
+    )
+
+    Begin {
+        Write-Log -Message "Starting Validate-SoftwareInstallation function" -Level "NOTICE"
+        # Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
+    }
+
+    Process {
+        $retryCount = 0
+        $validationSucceeded = $false
+
+        while ($retryCount -lt $MaxRetries -and -not $validationSucceeded) {
+            # Registry-based validation
+            if ($RegistryPath -or $SoftwareName) {
+                $registryPaths = @(
+                    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                    "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+                    "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
+                )
+
+                if ($RegistryPath) {
+                    if (Test-Path $RegistryPath) {
+                        $app = Get-ItemProperty -Path $RegistryPath -ErrorAction SilentlyContinue
+                        if ($app -and $app.DisplayName -like "*$SoftwareName*") {
+                            $installedVersion = [version]$app.DisplayVersion.Split(" ")[0]  # Extract only the version number
+                            if ($installedVersion -ge $MinVersion) {
+                                $validationSucceeded = $true
+                                return @{
+                                    IsInstalled = $true
+                                    Version     = $installedVersion
+                                    ProductCode = $app.PSChildName
+                                }
+                            }
+                        }
+                    }
+                }
+                else {
+                    foreach ($path in $registryPaths) {
+                        $items = Get-ChildItem -Path $path -ErrorAction SilentlyContinue
+                        foreach ($item in $items) {
+                            $app = Get-ItemProperty -Path $item.PsPath -ErrorAction SilentlyContinue
+                            if ($app.DisplayName -like "*$SoftwareName*") {
+                                $installedVersion = [version]$app.DisplayVersion.Split(" ")[0]  # Extract only the version number
+                                if ($installedVersion -ge $MinVersion) {
+                                    $validationSucceeded = $true
+                                    return @{
+                                        IsInstalled = $true
+                                        Version     = $installedVersion
+                                        ProductCode = $app.PSChildName
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            # File-based validation
+            if ($ExePath) {
+                if (Test-Path $ExePath) {
+                    $appVersionString = (Get-ItemProperty -Path $ExePath).VersionInfo.ProductVersion.Split(" ")[0]  # Extract only the version number
+                    $appVersion = [version]$appVersionString
+
+                    if ($appVersion -ge $MinVersion) {
+                        Write-Log -Message "Validation successful: $SoftwareName version $appVersion is installed at $ExePath." -Level "INFO"
+                        return @{
+                            IsInstalled = $true
+                            Version     = $appVersion
+                            Path        = $ExePath
+                        }
+                    }
+                    else {
+                        Write-Log -Message "Validation failed: $SoftwareName version $appVersion does not meet the minimum version requirement ($MinVersion)." -Level "ERROR"
+                    }
+                }
+                else {
+                    Write-Log -Message "Validation failed: $SoftwareName executable was not found at $ExePath." -Level "ERROR"
+                }
+            }
+
+            $retryCount++
+            Write-Log -Message "Validation attempt $retryCount failed: $SoftwareName not found or version does not meet the minimum requirement ($MinVersion). Retrying in $DelayBetweenRetries seconds..." -Level "WARNING"
+            Start-Sleep -Seconds $DelayBetweenRetries
+        }
+
+        return @{ IsInstalled = $false }
+    }
+
+    End {
+        Write-Log -Message "Exiting Validate-SoftwareInstallation function" -Level "NOTICE"
+    }
+}
+
+function Install-PowerShell7FromWeb {
+    param (
+        [string]$url = "https://raw.githubusercontent.com/aollivierre/setuplab/main/Install-PowerShell7.ps1"
+    )
+
+    Write-Log -Message "Attempting to install PowerShell 7 from URL: $url" -Level "INFO"
+
+    $process = Invoke-WebScript -url $url
+    if ($process) {
+        $process.WaitForExit()
+
+        # Perform post-installation validation
+        $validationParams = @{
+            SoftwareName        = "PowerShell"
+            MinVersion          = [version]"7.4.4"
+            RegistryPath        = "HKLM:\SOFTWARE\Microsoft\PowerShellCore"
+            ExePath             = "C:\Program Files\PowerShell\7\pwsh.exe"
+            MaxRetries          = 3  # Single retry after installation
+            DelayBetweenRetries = 5
+        }
+
+        $postValidationResult = Validate-SoftwareInstallation @validationParams
+        if ($postValidationResult.IsInstalled -and $postValidationResult.Version -ge $validationParams.MinVersion) {
+            Write-Log -Message "PowerShell 7 successfully installed and validated." -Level "INFO"
+            return $true
+        }
+        else {
+            Write-Log -Message "PowerShell 7 installation validation failed." -Level "ERROR"
+            return $false
+        }
+    }
+    else {
+        Write-Log -Message "Failed to start the installation process for PowerShell 7." -Level "ERROR"
+        return $false
+    }
+}
+
+
+function Get-PowerShellPath {
+    [CmdletBinding()]
+    param ()
+
+    Begin {
+        Write-Log -Message "Starting Get-PowerShellPath function" -Level "NOTICE"
+    }
+
+    Process {
+        $pwsh7Path = "C:\Program Files\PowerShell\7\pwsh.exe"
+        $pwsh5Path = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+        $maxAttempts = 3
+        $attempt = 0
+
+        # Check for PowerShell 7
+        while ($attempt -lt $maxAttempts) {
+            if (Test-Path $pwsh7Path) {
+                Write-Log -Message "PowerShell 7 found at $pwsh7Path" -Level "INFO"
+                return $pwsh7Path
+            }
+            else {
+                Write-Log -Message "PowerShell 7 not found. Attempting to install (Attempt $($attempt + 1) of $maxAttempts)..." -Level "WARNING"
+                $success = Install-PowerShell7FromWeb
+                if ($success) {
+                    Write-Log -Message "PowerShell 7 installed successfully." -Level "INFO"
+                    return $pwsh7Path
+                }
+            }
+            $attempt++
+        }
+
+        # Fallback to PowerShell 5 if installation of PowerShell 7 fails
+        if (Test-Path $pwsh5Path) {
+            Write-Log -Message "PowerShell 7 installation failed after $maxAttempts attempts. Falling back to PowerShell 5 at $pwsh5Path" -Level "WARNING"
+            return $pwsh5Path
+        }
+        else {
+            $errorMessage = "Neither PowerShell 7 nor PowerShell 5 was found on this system."
+            Write-Log -Message $errorMessage -Level "ERROR"
+            throw $errorMessage
+        }
+    }
+
+    End {
+        Write-Log -Message "Exiting Get-PowerShellPath function" -Level "NOTICE"
+    }
+}
+
+
 
 function Download-Modules {
     param (
         [array]$scriptDetails  # Array of script details, including URLs
     )
 
-    $powerShellPath = Get-PowerShellPath
     $processList = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
 
     foreach ($scriptDetail in $scriptDetails) {
-        $url = $scriptDetail.Url
-
-        Write-Log "Validating URL: $url" -Level "INFO"
-
-        if (Test-Url -url $url) {
-            Write-Log "Running script from URL: $url" -Level "INFO"
-            $process = Start-Process -FilePath $powerShellPath -ArgumentList @("-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "Invoke-Expression (Invoke-RestMethod -Uri '$url')") -Verb RunAs -PassThru
+        $process = Invoke-WebScript -url $scriptDetail.Url
+        if ($process) {
             $processList.Add($process)
-        }
-        else {
-            Write-Log "URL $url is not accessible" -Level "ERROR"
         }
     }
 
@@ -102,8 +381,6 @@ function Download-Modules {
         $process.WaitForExit()
     }
 }
-
-
 
 function Install-EnhancedModule {
     param (
@@ -298,16 +575,9 @@ function Initialize-Environment {
 
 
 # Elevate to administrator if not already
-if (-not (Test-Admin)) {
-    Write-Log "Restarting script with elevated permissions..."
-    $startProcessParams = @{
-        FilePath     = "powershell.exe"
-        ArgumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
-        Verb         = "RunAs"
-    }
-    Start-Process @startProcessParams
-    exit
-}
+# Example usage to check and optionally elevate:
+CheckAndElevate -ElevateIfNotAdmin $true
+
 
 # Example usage of Initialize-Environment
 $initializeParams = @{
