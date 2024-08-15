@@ -421,7 +421,7 @@ function Import-EnhancedModules {
 
         Write-Log "Importing module: $moduleName" -Level "INFO"
         try {
-            Import-Module -Name $moduleName -Verbose -Force -Global
+            Import-Module -Name $moduleName -Verbose:$true -Force:$true -Global:$true
         }
         catch {
             Write-Log "Failed to import module $moduleName. Error: $_" -Level "ERROR"
