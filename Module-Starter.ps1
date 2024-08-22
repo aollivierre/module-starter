@@ -605,7 +605,20 @@ if ($SkipPSGalleryModules) {
 
 else {
 
-    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force:$true -Confirm:$false
+    if ($PSVersionTable.PSVersion.Major -eq 5) {
+        # Check if the NuGet provider is already installed
+        if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Confirm:$false
+            Write-Host "NuGet provider installed successfully."
+        }
+        else {
+            Write-Host "NuGet provider is already installed."
+        }
+    }
+    else {
+        Write-Host "This script is running in PowerShell version $($PSVersionTable.PSVersion) which is not version 5. No action is taken."
+    }
+    
 
     # Example usage to download and use the PSD1 file from a GitHub repo
     $psd1Url = "https://raw.githubusercontent.com/aollivierre/module-starter/main/modules.psd1"
