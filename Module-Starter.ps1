@@ -604,6 +604,9 @@ if ($SkipPSGalleryModules) {
 }
 
 else {
+
+    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force:$true -Confirm:$false
+
     # Example usage to download and use the PSD1 file from a GitHub repo
     $psd1Url = "https://raw.githubusercontent.com/aollivierre/module-starter/main/modules.psd1"
     $localPsd1Path = "$env:TEMP\modules.psd1"  # Save the PSD1 file to a temporary location
