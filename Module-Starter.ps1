@@ -1,6 +1,6 @@
 param (
     [string]$Mode = "dev",
-    [string]$SkipPSGalleryModules = $false
+    [bool]$SkipPSGalleryModules = $false
 )
 
 Write-Host "The script is running in mode: $Mode"
