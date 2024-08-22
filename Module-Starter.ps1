@@ -1,9 +1,10 @@
 param (
     [string]$Mode = "dev",
-    [string]$SkipPSGalleryModules = $true
+    [string]$SkipPSGalleryModules = $false
 )
 
 Write-Host "The script is running in mode: $Mode"
+Write-Host "The SkipPSGalleryModules is set to: $SkipPSGalleryModules"
 
 
 $processList = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
@@ -595,7 +596,6 @@ Initialize-Environment @initializeParams
 
 # Execute InstallAndImportModulesPSGallery function
 # InstallAndImportModulesPSGallery -modulePsd1Path "$PSScriptRoot/modules.psd1"
-
 
 if ($SkipPSGalleryModules) {
 
