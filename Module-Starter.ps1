@@ -599,7 +599,7 @@ Initialize-Environment @initializeParams
 
 if ($SkipPSGalleryModules) {
 
-    Write-Log "skipping third party PS Galler Modules" -Level "INFO"
+    Write-Log "skipping third party PS Gallery Modules" -Level "INFO"
 
 }
 
