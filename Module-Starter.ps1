@@ -1,5 +1,5 @@
 param (
-    [string]$Mode = "prod",
+    [string]$Mode = "dev",
     [bool]$SkipPSGalleryModules = $false
 )
 
