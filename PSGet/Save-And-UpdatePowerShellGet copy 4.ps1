@@ -1,3 +1,5 @@
+#the following needs more work still because for example restoring from backup is importing the modules and we know that will not work because we will need to save and copy the modules to the Windows PowerShell modules folder
+
 # Logging function
 function Write-Log {
     param (

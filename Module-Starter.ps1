@@ -84,11 +84,18 @@ function CheckAndElevate {
                     Write-Log -Message "The script is not running with administrative privileges. Attempting to elevate..." -Level "WARNING"
 
                     $powerShellPath = Get-PowerShellPath
+                    # Define the parameters for starting a new PowerShell process
                     $startProcessParams = @{
-                        FilePath     = $powerShellPath
-                        ArgumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"")
-                        Verb         = "RunAs"
+                        FilePath     = $powerShellPath              # Path to the PowerShell executable
+                        ArgumentList = @(
+                            "-NoProfile", # Do not load the user's PowerShell profile
+                            "-ExecutionPolicy", "Bypass", # Set the execution policy to Bypass
+                            "-File", "`"$PSCommandPath`""           # Run the specified script file
+                        )
+                        Verb         = "RunAs"                      # Run the process with elevated privileges
                     }
+
+                    # Start the process with the defined parameters
                     Start-Process @startProcessParams
 
                     Write-Log -Message "Script re-launched with administrative privileges. Exiting current session." -Level "INFO"
