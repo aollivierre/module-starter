@@ -1,5 +1,5 @@
 param (
-    [string]$Mode = "dev",
+    [string]$Mode = "prod",
     [bool]$SkipPSGalleryModules = $false
 )
 
@@ -19,12 +19,108 @@ Write-Host "Full PowerShell Version Details:"
 $PSVersionTable | Format-Table -AutoSize
 
 
-
 $processList = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
 $ScriptPath = $MyInvocation.MyCommand.Definition
 $scriptDetails = @(
     @{ Url = "https://raw.githubusercontent.com/aollivierre/module-starter/main/Clone-EnhancedRepos.ps1" }
 )
+
+
+# Function for logging with color coding
+function Write-Log {
+    param (
+        [string]$Message,
+        [string]$Level = "INFO"
+    )
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logMessage = "[$timestamp] [$Level] $Message"
+    
+    switch ($Level) {
+        "INFO" { Write-Host $logMessage -ForegroundColor Green }
+        "ERROR" { Write-Host $logMessage -ForegroundColor Red }
+        "WARNING" { Write-Host $logMessage -ForegroundColor Yellow }
+        default { Write-Host $logMessage -ForegroundColor White }
+    }
+
+    # Append to log file
+    $logFilePath = [System.IO.Path]::Combine($env:TEMP, 'install-scripts.log')
+    $logMessage | Out-File -FilePath $logFilePath -Append -Encoding utf8
+}
+
+# Function to get the platform
+function Get-Platform {
+    if ($PSVersionTable.PSVersion.Major -ge 7) {
+        return $PSVersionTable.Platform
+    }
+    else {
+        return [System.Environment]::OSVersion.Platform
+    }
+}
+
+
+function Get-PowerShellPath {
+    [CmdletBinding()]
+    param (
+        [switch]$ForcePowerShell5
+    )
+
+    Begin {
+        Write-Log -Message "Starting Get-PowerShellPath function" -Level "NOTICE"
+    }
+
+    Process {
+        $pwsh7Path = "C:\Program Files\PowerShell\7\pwsh.exe"
+        $pwsh5Path = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+        $maxAttempts = 3
+        $attempt = 0
+
+        # Check if PowerShell 5 is being forced
+        if ($ForcePowerShell5) {
+            if (Test-Path $pwsh5Path) {
+                Write-Log -Message "Forcing use of PowerShell 5 at $pwsh5Path" -Level "INFO"
+                return $pwsh5Path
+            }
+            else {
+                $errorMessage = "PowerShell 5 was forced, but it was not found on this system."
+                Write-Log -Message $errorMessage -Level "ERROR"
+                throw $errorMessage
+            }
+        }
+
+        # Check for PowerShell 7
+        while ($attempt -lt $maxAttempts) {
+            if (Test-Path $pwsh7Path) {
+                Write-Log -Message "PowerShell 7 found at $pwsh7Path" -Level "INFO"
+                return $pwsh7Path
+            }
+            else {
+                Write-Log -Message "PowerShell 7 not found. Attempting to install (Attempt $($attempt + 1) of $maxAttempts)..." -Level "WARNING"
+                $success = Install-PowerShell7FromWeb
+                if ($success) {
+                    Write-Log -Message "PowerShell 7 installed successfully." -Level "INFO"
+                    return $pwsh7Path
+                }
+            }
+            $attempt++
+        }
+
+        # Fallback to PowerShell 5 if installation of PowerShell 7 fails
+        if (Test-Path $pwsh5Path) {
+            Write-Log -Message "PowerShell 7 installation failed after $maxAttempts attempts. Falling back to PowerShell 5 at $pwsh5Path" -Level "WARNING"
+            return $pwsh5Path
+        }
+        else {
+            $errorMessage = "Neither PowerShell 7 nor PowerShell 5 was found on this system."
+            Write-Log -Message $errorMessage -Level "ERROR"
+            throw $errorMessage
+        }
+    }
+
+    End {
+        Write-Log -Message "Exiting Get-PowerShellPath function" -Level "NOTICE"
+    }
+}
+
 
 # Function to test if the script is running as an administrator
 function CheckAndElevate {
@@ -83,7 +179,7 @@ function CheckAndElevate {
                 try {
                     Write-Log -Message "The script is not running with administrative privileges. Attempting to elevate..." -Level "WARNING"
 
-                    $powerShellPath = Get-PowerShellPath
+                    $powerShellPath = Get-PowerShellPath -ForcePowerShell5
                     # Define the parameters for starting a new PowerShell process
                     $startProcessParams = @{
                         FilePath     = $powerShellPath              # Path to the PowerShell executable
@@ -122,37 +218,171 @@ function CheckAndElevate {
     }
 }
 
+
+# Install the PSFramework module if not already installed
+# Install-Module -Name PSFramework -Scope AllUsers -Force -AllowClobber -SkipPublisherCheck -Verbose
+
+
+function Reset-ModulePaths {
+    [CmdletBinding()]
+    param ()
+
+    begin {
+        # Initialization block, typically used for setup tasks
+        Write-Log "Initializing Reset-ModulePaths function..." -Level "DEBUG"
+    }
+
+    process {
+        try {
+            # Log the start of the process
+            Write-Log "Resetting module paths to default values..." -Level "INFO"
+
+            # Get the current user's Documents path
+            $userModulesPath = [System.IO.Path]::Combine($env:USERPROFILE, 'Documents\WindowsPowerShell\Modules')
+
+            # Define the default module paths
+            $defaultModulePaths = @(
+                "C:\Program Files\WindowsPowerShell\Modules",
+                $userModulesPath,
+                "C:\Windows\System32\WindowsPowerShell\v1.0\Modules"
+            )
+
+            # Attempt to reset the PSModulePath environment variable
+            $env:PSModulePath = [string]::Join(';', $defaultModulePaths)
+            Write-Log "PSModulePath successfully set to: $($env:PSModulePath -split ';' | Out-String)" -Level "INFO"
+
+            # Optionally persist the change for the current user
+            [Environment]::SetEnvironmentVariable("PSModulePath", $env:PSModulePath, [EnvironmentVariableTarget]::User)
+            Write-Log "PSModulePath environment variable set for the current user." -Level "INFO"
+        }
+        catch {
+            # Capture and log any errors that occur during the process
+            $errorMessage = $_.Exception.Message
+            Write-Log "Error resetting module paths: $errorMessage" -Level "ERROR"
+
+            # Optionally, you could throw the error to halt the script
+            throw $_
+        }
+    }
+
+    end {
+        # Finalization block, typically used for cleanup tasks
+        Write-Log "Reset-ModulePaths function completed." -Level "DEBUG"
+    }
+}
+
+
+function Invoke-InPowerShell5 {
+    param (
+        [string]$ScriptPath
+    )
+
+    if ($PSVersionTable.PSVersion.Major -ne 5) {
+        Write-Log "Relaunching script in PowerShell 5 (x64)..." -Level "WARNING"
+
+        # Get the path to PowerShell 5 (x64)
+        $ps5x64Path = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+
+        # Launch in PowerShell 5 (x64)
+        $startProcessParams64 = @{
+            FilePath     = $ps5x64Path
+            ArgumentList = @(
+                "-NoExit",
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", "`"$ScriptPath`""
+            )
+            Verb         = "RunAs"
+            PassThru     = $true
+        }
+
+        Write-Log "Starting PowerShell 5 (x64) to perform the update..." -Level "NOTICE"
+        $process64 = Start-Process @startProcessParams64
+        $process64.WaitForExit()
+
+        Write-Log "PowerShell 5 (x64) process completed." -Level "NOTICE"
+        Exit
+    }
+}
+
+
+function Ensure-ModuleIsLatest {
+    param (
+        [string]$ModuleName
+    )
+
+    Write-Log -Message "Checking if the latest version of $ModuleName is installed..." -Level "INFO"
+
+    try {
+
+        CheckAndElevate -ElevateIfNotAdmin $true
+
+        Invoke-InPowerShell5
+
+        Reset-ModulePaths
+
+        # Get the installed version of the module, if any
+        $installedModule = Get-Module -Name $ModuleName -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
+
+        # Get the latest available version of the module from PSGallery
+        $latestModule = Find-Module -Name $ModuleName
+
+        if ($installedModule) {
+            if ($installedModule.Version -lt $latestModule.Version) {
+                Write-Log -Message "$ModuleName version $($installedModule.Version) is installed, but version $($latestModule.Version) is available. Updating module..." -Level "WARNING"
+                Install-Module -Name $ModuleName -Scope AllUsers -Force -SkipPublisherCheck -Verbose
+            }
+            else {
+                Write-Log -Message "The latest version of $ModuleName is already installed. Version: $($installedModule.Version)" -Level "INFO"
+            }
+        }
+        else {
+            Write-Log -Message "$ModuleName is not installed. Installing the latest version $($latestModule.Version)..." -Level "WARNING"
+            Install-Module -Name $ModuleName -Scope AllUsers -Force -SkipPublisherCheck -Verbose -AllowClobber
+        }
+    }
+    catch {
+        Write-Log -Message "Error occurred while checking or installing $ModuleName $_" -Level "ERROR"
+        throw
+    }
+}
+
 # Function for logging with color coding
-function Write-Log {
+function Write-EnhancedLog {
     param (
         [string]$Message,
-        [string]$Level = "INFO"
+        [string]$Level = 'INFO'
     )
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logMessage = "[$timestamp] [$Level] $Message"
-    
-    switch ($Level) {
-        "INFO" { Write-Host $logMessage -ForegroundColor Green }
-        "ERROR" { Write-Host $logMessage -ForegroundColor Red }
-        "WARNING" { Write-Host $logMessage -ForegroundColor Yellow }
-        default { Write-Host $logMessage -ForegroundColor White }
+
+    # Get the PowerShell call stack to determine the actual calling function
+    $callStack = Get-PSCallStack
+    $callerFunction = if ($callStack.Count -ge 2) { $callStack[1].Command } else { '<Unknown>' }
+
+    # Prepare the formatted message with the actual calling function information
+    $formattedMessage = "[$Level] $Message"
+
+    # Map custom levels to PSFramework levels
+    $psfLevel = switch ($Level.ToUpper()) {
+        'DEBUG' { 'Debug' }
+        'INFO' { 'Host' }
+        'NOTICE' { 'Important' }
+        'WARNING' { 'Warning' }
+        'ERROR' { 'Error' }
+        'CRITICAL' { 'Critical' }
+        'IMPORTANT' { 'Important' }
+        'OUTPUT' { 'Output' }
+        'SIGNIFICANT' { 'Significant' }
+        'VERYVERBOSE' { 'VeryVerbose' }
+        'VERBOSE' { 'Verbose' }
+        'SOMEWHATVERBOSE' { 'SomewhatVerbose' }
+        'SYSTEM' { 'System' }
+        'INTERNALCOMMENT' { 'InternalComment' }
+        default { 'Host' }
     }
 
-    # Append to log file
-    $logFilePath = [System.IO.Path]::Combine($env:TEMP, 'install-scripts.log')
-    $logMessage | Out-File -FilePath $logFilePath -Append -Encoding utf8
+    # Log the message using PSFramework with the actual calling function name
+    Write-PSFMessage -Level $psfLevel -Message $formattedMessage -FunctionName $callerFunction
 }
-
-# Function to get the platform
-function Get-Platform {
-    if ($PSVersionTable.PSVersion.Major -ge 7) {
-        return $PSVersionTable.Platform
-    }
-    else {
-        return [System.Environment]::OSVersion.Platform
-    }
-}
-
 
 function Test-Url {
     param (
@@ -174,10 +404,10 @@ function Invoke-WebScript {
 
     $powerShellPath = Get-PowerShellPath
 
-    Write-Log "Validating URL: $url" -Level "INFO"
+    Write-EnhancedLog "Validating URL: $url" -Level "INFO"
 
     if (Test-Url -url $url) {
-        Write-Log "Running script from URL: $url" -Level "INFO"
+        Write-EnhancedLog "Running script from URL: $url" -Level "INFO"
 
         $startProcessParams = @{
             FilePath     = $powerShellPath
@@ -196,7 +426,7 @@ function Invoke-WebScript {
         return $process
     }
     else {
-        Write-Log "URL $url is not accessible" -Level "ERROR"
+        Write-EnhancedLog "URL $url is not accessible" -Level "ERROR"
         return $null
     }
 }
@@ -213,7 +443,7 @@ function Validate-SoftwareInstallation {
     )
 
     Begin {
-        Write-Log -Message "Starting Validate-SoftwareInstallation function" -Level "NOTICE"
+        Write-EnhancedLog -Message "Starting Validate-SoftwareInstallation function" -Level "NOTICE"
         # Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
     }
 
@@ -274,7 +504,7 @@ function Validate-SoftwareInstallation {
                     $appVersion = Sanitize-VersionString -versionString $appVersionString
 
                     if ($appVersion -ge $MinVersion) {
-                        Write-Log -Message "Validation successful: $SoftwareName version $appVersion is installed at $ExePath." -Level "INFO"
+                        Write-EnhancedLog -Message "Validation successful: $SoftwareName version $appVersion is installed at $ExePath." -Level "INFO"
                         return @{
                             IsInstalled = $true
                             Version     = $appVersion
@@ -282,16 +512,16 @@ function Validate-SoftwareInstallation {
                         }
                     }
                     else {
-                        Write-Log -Message "Validation failed: $SoftwareName version $appVersion does not meet the minimum version requirement ($MinVersion)." -Level "ERROR"
+                        Write-EnhancedLog -Message "Validation failed: $SoftwareName version $appVersion does not meet the minimum version requirement ($MinVersion)." -Level "ERROR"
                     }
                 }
                 else {
-                    Write-Log -Message "Validation failed: $SoftwareName executable was not found at $ExePath." -Level "ERROR"
+                    Write-EnhancedLog -Message "Validation failed: $SoftwareName executable was not found at $ExePath." -Level "ERROR"
                 }
             }
 
             $retryCount++
-            Write-Log -Message "Validation attempt $retryCount failed: $SoftwareName not found or version does not meet the minimum requirement ($MinVersion). Retrying in $DelayBetweenRetries seconds..." -Level "WARNING"
+            Write-EnhancedLog -Message "Validation attempt $retryCount failed: $SoftwareName not found or version does not meet the minimum requirement ($MinVersion). Retrying in $DelayBetweenRetries seconds..." -Level "WARNING"
             Start-Sleep -Seconds $DelayBetweenRetries
         }
 
@@ -299,7 +529,7 @@ function Validate-SoftwareInstallation {
     }
 
     End {
-        Write-Log -Message "Exiting Validate-SoftwareInstallation function" -Level "NOTICE"
+        Write-EnhancedLog -Message "Exiting Validate-SoftwareInstallation function" -Level "NOTICE"
     }
 }
 
@@ -317,7 +547,7 @@ function Sanitize-VersionString {
         return $version
     }
     catch {
-        Write-Log -Message "Failed to convert version string: $versionString. Error: $_" -Level "ERROR"
+        Write-EnhancedLog -Message "Failed to convert version string: $versionString. Error: $_" -Level "ERROR"
         return $null
     }
 }
@@ -328,7 +558,7 @@ function Install-PowerShell7FromWeb {
         [string]$url = "https://raw.githubusercontent.com/aollivierre/setuplab/main/Install-PowerShell7.ps1"
     )
 
-    Write-Log -Message "Attempting to install PowerShell 7 from URL: $url" -Level "INFO"
+    Write-EnhancedLog -Message "Attempting to install PowerShell 7 from URL: $url" -Level "INFO"
 
     $process = Invoke-WebScript -url $url
     if ($process) {
@@ -346,68 +576,20 @@ function Install-PowerShell7FromWeb {
 
         $postValidationResult = Validate-SoftwareInstallation @validationParams
         if ($postValidationResult.IsInstalled -and $postValidationResult.Version -ge $validationParams.MinVersion) {
-            Write-Log -Message "PowerShell 7 successfully installed and validated." -Level "INFO"
+            Write-EnhancedLog -Message "PowerShell 7 successfully installed and validated." -Level "INFO"
             return $true
         }
         else {
-            Write-Log -Message "PowerShell 7 installation validation failed." -Level "ERROR"
+            Write-EnhancedLog -Message "PowerShell 7 installation validation failed." -Level "ERROR"
             return $false
         }
     }
     else {
-        Write-Log -Message "Failed to start the installation process for PowerShell 7." -Level "ERROR"
+        Write-EnhancedLog -Message "Failed to start the installation process for PowerShell 7." -Level "ERROR"
         return $false
     }
 }
 
-
-function Get-PowerShellPath {
-    [CmdletBinding()]
-    param ()
-
-    Begin {
-        Write-Log -Message "Starting Get-PowerShellPath function" -Level "NOTICE"
-    }
-
-    Process {
-        $pwsh7Path = "C:\Program Files\PowerShell\7\pwsh.exe"
-        $pwsh5Path = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
-        $maxAttempts = 3
-        $attempt = 0
-
-        # Check for PowerShell 7
-        while ($attempt -lt $maxAttempts) {
-            if (Test-Path $pwsh7Path) {
-                Write-Log -Message "PowerShell 7 found at $pwsh7Path" -Level "INFO"
-                return $pwsh7Path
-            }
-            else {
-                Write-Log -Message "PowerShell 7 not found. Attempting to install (Attempt $($attempt + 1) of $maxAttempts)..." -Level "WARNING"
-                $success = Install-PowerShell7FromWeb
-                if ($success) {
-                    Write-Log -Message "PowerShell 7 installed successfully." -Level "INFO"
-                    return $pwsh7Path
-                }
-            }
-            $attempt++
-        }
-
-        # Fallback to PowerShell 5 if installation of PowerShell 7 fails
-        if (Test-Path $pwsh5Path) {
-            Write-Log -Message "PowerShell 7 installation failed after $maxAttempts attempts. Falling back to PowerShell 5 at $pwsh5Path" -Level "WARNING"
-            return $pwsh5Path
-        }
-        else {
-            $errorMessage = "Neither PowerShell 7 nor PowerShell 5 was found on this system."
-            Write-Log -Message $errorMessage -Level "ERROR"
-            throw $errorMessage
-        }
-    }
-
-    End {
-        Write-Log -Message "Exiting Get-PowerShellPath function" -Level "NOTICE"
-    }
-}
 
 
 
@@ -431,86 +613,8 @@ function Download-Modules {
     }
 }
 
-function Invoke-InPowerShell5 {
-    param (
-        [string]$ScriptPath
-    )
 
-    if ($PSVersionTable.PSVersion.Major -ne 5) {
-        Write-Log "Relaunching script in PowerShell 5 (x64)..." -Level "WARNING"
 
-        # Get the path to PowerShell 5 (x64)
-        $ps5x64Path = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-
-        # Launch in PowerShell 5 (x64)
-        $startProcessParams64 = @{
-            FilePath     = $ps5x64Path
-            ArgumentList = @(
-                "-NoExit",
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "`"$ScriptPath`""
-            )
-            Verb         = "RunAs"
-            PassThru     = $true
-        }
-
-        Write-Log "Starting PowerShell 5 (x64) to perform the update..." -Level "NOTICE"
-        $process64 = Start-Process @startProcessParams64
-        $process64.WaitForExit()
-
-        Write-Log "PowerShell 5 (x64) process completed." -Level "NOTICE"
-        Exit
-    }
-}
-
-function Reset-ModulePaths {
-    [CmdletBinding()]
-    param ()
-
-    begin {
-        # Initialization block, typically used for setup tasks
-        Write-Log "Initializing Reset-ModulePaths function..." -Level "DEBUG"
-    }
-
-    process {
-        try {
-            # Log the start of the process
-            Write-Log "Resetting module paths to default values..." -Level "INFO"
-
-            # Get the current user's Documents path
-            $userModulesPath = [System.IO.Path]::Combine($env:USERPROFILE, 'Documents\WindowsPowerShell\Modules')
-
-            # Define the default module paths
-            $defaultModulePaths = @(
-                "C:\Program Files\WindowsPowerShell\Modules",
-                $userModulesPath,
-                "C:\Windows\System32\WindowsPowerShell\v1.0\Modules"
-            )
-
-            # Attempt to reset the PSModulePath environment variable
-            $env:PSModulePath = [string]::Join(';', $defaultModulePaths)
-            Write-Log "PSModulePath successfully set to: $($env:PSModulePath -split ';' | Out-String)" -Level "INFO"
-
-            # Optionally persist the change for the current user
-            [Environment]::SetEnvironmentVariable("PSModulePath", $env:PSModulePath, [EnvironmentVariableTarget]::User)
-            Write-Log "PSModulePath environment variable set for the current user." -Level "INFO"
-        }
-        catch {
-            # Capture and log any errors that occur during the process
-            $errorMessage = $_.Exception.Message
-            Write-Log "Error resetting module paths: $errorMessage" -Level "ERROR"
-
-            # Optionally, you could throw the error to halt the script
-            throw $_
-        }
-    }
-
-    end {
-        # Finalization block, typically used for cleanup tasks
-        Write-Log "Reset-ModulePaths function completed." -Level "DEBUG"
-    }
-}
 
 function Install-EnhancedModule {
     param (
@@ -518,25 +622,25 @@ function Install-EnhancedModule {
     )
 
     # Log the start of the module installation process
-    Write-Log "Starting the module installation process for: $ModuleName" -Level "NOTICE"
+    Write-EnhancedLog "Starting the module installation process for: $ModuleName" -Level "NOTICE"
 
     # Check if the current PowerShell version is not 5
     # if ($PSVersionTable.PSVersion.Major -ne 5) {
-    # Write-Log "Current PowerShell version is $($PSVersionTable.PSVersion). PowerShell 5 is required." -Level "WARNING"
+    # Write-EnhancedLog "Current PowerShell version is $($PSVersionTable.PSVersion). PowerShell 5 is required." -Level "WARNING"
 
     # # Get the path to PowerShell 5
     # $ps5Path = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-    # Write-Log "PowerShell 5 path: $ps5Path" -Level "INFO"
+    # Write-EnhancedLog "PowerShell 5 path: $ps5Path" -Level "INFO"
 
     # # Construct the command to install the module in PowerShell 5
     # $command = "& '$ps5Path' -ExecutionPolicy Bypass -Command `"Install-Module -Name '$ModuleName' -Force -SkipPublisherCheck -Scope AllUsers`""
-    # Write-Log "Constructed command for PowerShell 5: $command" -Level "DEBUG"
+    # Write-EnhancedLog "Constructed command for PowerShell 5: $command" -Level "DEBUG"
 
     # # Launch PowerShell 5 to run the module installation
-    # Write-Log "Launching PowerShell 5 to install the module: $ModuleName" -Level "INFO"
+    # Write-EnhancedLog "Launching PowerShell 5 to install the module: $ModuleName" -Level "INFO"
     # Invoke-Expression $command
 
-    # Write-Log "Module installation command executed in PowerShell 5. Exiting current session." -Level "NOTICE"
+    # Write-EnhancedLog "Module installation command executed in PowerShell 5. Exiting current session." -Level "NOTICE"
     # return
 
     # Path to the current script
@@ -551,15 +655,15 @@ function Install-EnhancedModule {
     # }
 
     # If already in PowerShell 5, install the module
-    Write-Log "Current PowerShell version is 5. Proceeding with module installation." -Level "INFO"
-    Write-Log "Installing module: $ModuleName in PowerShell 5" -Level "NOTICE"
+    Write-EnhancedLog "Current PowerShell version is 5. Proceeding with module installation." -Level "INFO"
+    Write-EnhancedLog "Installing module: $ModuleName in PowerShell 5" -Level "NOTICE"
 
     try {
         Install-Module -Name $ModuleName -Force -SkipPublisherCheck -Scope AllUsers
-        Write-Log "Module $ModuleName installed successfully in PowerShell 5." -Level "INFO"
+        Write-EnhancedLog "Module $ModuleName installed successfully in PowerShell 5." -Level "INFO"
     }
     catch {
-        Write-Log "Failed to install module $ModuleName. Error: $_" -Level "ERROR"
+        Write-EnhancedLog "Failed to install module $ModuleName. Error: $_" -Level "ERROR"
     }
 }
 
@@ -573,7 +677,7 @@ function Import-EnhancedModules {
 
     # Validate PSD1 file path
     if (-not (Test-Path -Path $modulePsd1Path)) {
-        Write-Log "modules.psd1 file not found at path: $modulePsd1Path" -Level "ERROR"
+        Write-EnhancedLog "modules.psd1 file not found at path: $modulePsd1Path" -Level "ERROR"
         throw "modules.psd1 file not found."
     }
 
@@ -590,16 +694,16 @@ function Import-EnhancedModules {
 
     foreach ($moduleName in $modulesToImport) {
         if (-not (Get-Module -ListAvailable -Name $moduleName)) {
-            Write-Log "Module $moduleName is not installed. Attempting to install..." -Level "INFO"
+            Write-EnhancedLog "Module $moduleName is not installed. Attempting to install..." -Level "INFO"
             Install-EnhancedModule -ModuleName $moduleName -ScriptPath $ScriptPath
         }
 
-        Write-Log "Importing module: $moduleName" -Level "INFO"
+        Write-EnhancedLog "Importing module: $moduleName" -Level "INFO"
         try {
             Import-Module -Name $moduleName -Verbose:$true -Force:$true -Global:$true
         }
         catch {
-            Write-Log "Failed to import module $moduleName. Error: $_" -Level "ERROR"
+            Write-EnhancedLog "Failed to import module $moduleName. Error: $_" -Level "ERROR"
         }
     }
 }
@@ -611,13 +715,13 @@ function Setup-GlobalPaths {
 
     # Set the modules base path and create if it doesn't exist
     if (-Not (Test-Path $ModulesBasePath)) {
-        Write-Log "ModulesBasePath '$ModulesBasePath' does not exist. Creating directory..." -Level "INFO"
+        Write-EnhancedLog "ModulesBasePath '$ModulesBasePath' does not exist. Creating directory..." -Level "INFO"
         New-Item -Path $ModulesBasePath -ItemType Directory -Force
     }
     $global:modulesBasePath = $ModulesBasePath
 
     # Log the paths for verification
-    Write-Log "Modules Base Path: $global:modulesBasePath" -Level "INFO"
+    Write-EnhancedLog "Modules Base Path: $global:modulesBasePath" -Level "INFO"
 }
 
 
@@ -654,34 +758,34 @@ function Download-Psd1File {
     )
 
     begin {
-        Write-Log -Message "Starting Download-Psd1File function" -Level "NOTICE"
+        Write-EnhancedLog -Message "Starting Download-Psd1File function" -Level "NOTICE"
         # Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
 
         # Validate destination directory
         $destinationDirectory = [System.IO.Path]::GetDirectoryName($destinationPath)
         if (-not (Test-Path -Path $destinationDirectory)) {
-            Write-Log -Message "Destination directory not found at path: $destinationDirectory" -Level "ERROR"
+            Write-EnhancedLog -Message "Destination directory not found at path: $destinationDirectory" -Level "ERROR"
             throw "Destination directory not found."
         }
 
-        Write-Log -Message "Validated destination directory at path: $destinationDirectory" -Level "INFO"
+        Write-EnhancedLog -Message "Validated destination directory at path: $destinationDirectory" -Level "INFO"
     }
 
     process {
         try {
-            Write-Log -Message "Downloading PSD1 file from URL: $url" -Level "INFO"
+            Write-EnhancedLog -Message "Downloading PSD1 file from URL: $url" -Level "INFO"
             Invoke-WebRequest -Uri $url -OutFile $destinationPath -UseBasicParsing
-            Write-Log -Message "Downloaded PSD1 file to: $destinationPath" -Level "INFO"
+            Write-EnhancedLog -Message "Downloaded PSD1 file to: $destinationPath" -Level "INFO"
         }
         catch {
-            Write-Log -Message "Failed to download PSD1 file from $url. Error: $_" -Level "ERROR"
+            Write-EnhancedLog -Message "Failed to download PSD1 file from $url. Error: $_" -Level "ERROR"
             Handle-Error -ErrorRecord $_
             throw $_
         }
     }
 
     end {
-        Write-Log -Message "Download-Psd1File function execution completed." -Level "NOTICE"
+        Write-EnhancedLog -Message "Download-Psd1File function execution completed." -Level "NOTICE"
     }
 }
 
@@ -704,13 +808,36 @@ function Ensure-NuGetProvider {
     }
 }
 
+function Ensure-GitIsInstalled {
+    param (
+        [version]$MinVersion = [version]"2.46.0",
+        [string]$RegistryPath = "HKLM:\SOFTWARE\GitForWindows",
+        [string]$ExePath = "C:\Program Files\Git\bin\git.exe"
+    )
+
+    Write-EnhancedLog -Message "Checking if Git is installed and meets the minimum version requirement." -Level "INFO"
+
+    # Use the Validate-SoftwareInstallation function to check if Git is installed and meets the version requirement
+    $validationResult = Validate-SoftwareInstallation -SoftwareName "Git" -MinVersion $MinVersion -RegistryPath $RegistryPath -ExePath $ExePath
+
+    if ($validationResult.IsInstalled) {
+        Write-EnhancedLog -Message "Git version $($validationResult.Version) is installed and meets the minimum version requirement." -Level "INFO"
+        return $true
+    }
+    else {
+        Write-EnhancedLog -Message "Git is not installed or does not meet the minimum version requirement. Installing Git..." -Level "WARNING"
+        $installSuccess = Install-GitFromWeb
+        return $installSuccess
+    }
+}
+
 
 function Install-GitFromWeb {
     param (
         [string]$url = "https://raw.githubusercontent.com/aollivierre/setuplab/main/Install-Git.ps1"
     )
 
-    Write-Log -Message "Attempting to install Git from URL: $url" -Level "INFO"
+    Write-EnhancedLog -Message "Attempting to install Git from URL: $url" -Level "INFO"
 
     $process = Invoke-WebScript -url $url
     if ($process) {
@@ -728,154 +855,147 @@ function Install-GitFromWeb {
 
         $postValidationResult = Validate-SoftwareInstallation @validationParams
         if ($postValidationResult.IsInstalled -and $postValidationResult.Version -ge $validationParams.MinVersion) {
-            Write-Log -Message "Git successfully installed and validated." -Level "INFO"
+            Write-EnhancedLog -Message "Git successfully installed and validated." -Level "INFO"
             return $true
         }
         else {
-            Write-Log -Message "Git installation validation failed." -Level "ERROR"
+            Write-EnhancedLog -Message "Git installation validation failed." -Level "ERROR"
             return $false
         }
     }
     else {
-        Write-Log -Message "Failed to start the installation process for Git." -Level "ERROR"
+        Write-EnhancedLog -Message "Failed to start the installation process for Git." -Level "ERROR"
         return $false
     }
 }
 
+function Get-GitPath {
+    <#
+    .SYNOPSIS
+    Discovers the path to the Git executable on the system.
 
-function Ensure-GitIsInstalled {
-    param (
-        [version]$MinVersion = [version]"2.46.0",
-        [string]$RegistryPath = "HKLM:\SOFTWARE\GitForWindows",
-        [string]$ExePath = "C:\Program Files\Git\bin\git.exe"
-    )
+    .DESCRIPTION
+    This function attempts to find the Git executable by checking common installation directories and the system's PATH environment variable.
 
-    Write-Log -Message "Checking if Git is installed and meets the minimum version requirement." -Level "INFO"
-
-    # Use the Validate-SoftwareInstallation function to check if Git is installed and meets the version requirement
-    $validationResult = Validate-SoftwareInstallation -SoftwareName "Git" -MinVersion $MinVersion -RegistryPath $RegistryPath -ExePath $ExePath
-
-    if ($validationResult.IsInstalled) {
-        Write-Log -Message "Git version $($validationResult.Version) is installed and meets the minimum version requirement." -Level "INFO"
-        return $true
+    .EXAMPLE
+    $gitPath = Get-GitPath
+    if ($gitPath) {
+        Write-Host "Git found at: $gitPath"
+    } else {
+        Write-Host "Git not found."
     }
-    else {
-        Write-Log -Message "Git is not installed or does not meet the minimum version requirement. Installing Git..." -Level "WARNING"
-        $installSuccess = Install-GitFromWeb
-        return $installSuccess
+    #>
+
+    [CmdletBinding()]
+    param ()
+
+    try {
+        # Common Git installation paths
+        $commonPaths = @(
+            "C:\Program Files\Git\bin\git.exe",
+            "C:\Program Files (x86)\Git\bin\git.exe"
+        )
+
+        # Check the common paths
+        foreach ($path in $commonPaths) {
+            if (Test-Path -Path $path) {
+                Write-EnhancedLog -Message "Git found at: $path" -Level "INFO"
+                return $path
+            }
+        }
+
+        # If not found, check if Git is in the system PATH
+        $gitPathInEnv = (Get-Command git -ErrorAction SilentlyContinue).Source
+        if ($gitPathInEnv) {
+            Write-EnhancedLog -Message "Git found in system PATH: $gitPathInEnv" -Level "INFO"
+            return $gitPathInEnv
+        }
+
+        # If Git is still not found, return $null
+        Write-EnhancedLog -Message "Git executable not found." -Level "ERROR"
+        return $null
+    }
+    catch {
+        Write-EnhancedLog -Message "Error occurred while trying to find Git path: $_" -Level "ERROR"
+        return $null
     }
 }
 
 
-
-
 function Manage-GitRepositories {
-    <#
-    .SYNOPSIS
-    Manages Git repositories by pulling changes if behind, and identifying repositories with unpushed changes.
-
-    .DESCRIPTION
-    This function iterates through all Git repositories in the specified directory, pulls changes if the local branch is behind,
-    and logs repositories with pending push changes. It also provides a summary of the repository statuses.
-
-    .PARAMETER ModulesBasePath
-    The base path where the Git repositories are located.
-
-    .EXAMPLE
-    Manage-GitRepositories -ModulesBasePath 'C:\Code\modulesv2'
-    This example manages Git repositories in the specified path.
-
-    .NOTES
-    Ensure Git is installed and accessible via the command line.
-    #>
-
-    [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
         [string]$ModulesBasePath
     )
 
     begin {
-        Write-Log -Message "Starting Manage-GitRepositories function" -Level "INFO"
-        # Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
+        Write-EnhancedLog -Message "Starting Manage-GitRepositories function" -Level "INFO"
 
+        # Initialize lists for tracking repository statuses
         $reposWithPushChanges = [System.Collections.Generic.List[string]]::new()
         $reposSummary = [System.Collections.Generic.List[PSCustomObject]]::new()
 
         # Validate ModulesBasePath
         if (-not (Test-Path -Path $ModulesBasePath)) {
-            Write-Log -Message "Modules base path not found: $ModulesBasePath" -Level "ERROR"
+            Write-EnhancedLog -Message "Modules base path not found: $ModulesBasePath" -Level "ERROR"
             throw "Modules base path not found."
         }
 
-        Write-Log -Message "Found modules base path: $ModulesBasePath" -Level "INFO"
+        Write-EnhancedLog -Message "Found modules base path: $ModulesBasePath" -Level "INFO"
+
+        # Get the Git path
+        $GitPath = Get-GitPath
+        if (-not $GitPath) {
+            throw "Git executable not found."
+        }
     }
 
     process {
-        try {
-            $repos = Get-ChildItem -Path $ModulesBasePath -Directory
+        $repos = Get-ChildItem -Path $ModulesBasePath -Directory
 
-            foreach ($repo in $repos) {
-                try {
-                    Set-Location -Path $repo.FullName
+        foreach ($repo in $repos) {
+            Set-Location -Path $repo.FullName
 
-                    # Fetch the latest changes
-                    git fetch
+            # Fetch the latest changes
+            & "$GitPath" fetch
 
-                    # Check for pending changes
-                    $status = git status
+            # Check for pending changes
+            $status = & "$GitPath" status
 
-                    $repoStatus = "Up to Date"
-                    if ($status -match "Your branch is behind") {
-                        Write-Log -Message "Repository $($repo.Name) is behind the remote. Pulling changes..." -Level "INFO"
-                        git pull
-                        $repoStatus = "Pulled"
-                    }
-
-                    if ($status -match "Your branch is ahead") {
-                        Write-Log -Message "Repository $($repo.Name) has unpushed changes." -Level "WARNING"
-                        $reposWithPushChanges.Add($repo.FullName)
-                        $repoStatus = "Pending Push"
-                    }
-
-                    # Add the repository status to the summary list
-                    $reposSummary.Add([pscustomobject]@{
-                            RepositoryName = $repo.Name
-                            Status         = $repoStatus
-                            LastChecked    = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-                        })
-                }
-                catch {
-                    Write-Log -Message "Failed to process repository: $($repo.FullName). Error: $_" -Level "ERROR"
-                    $reposSummary.Add([pscustomobject]@{
-                            RepositoryName = $repo.Name
-                            Status         = "Error"
-                            LastChecked    = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-                        })
-                }
+            $repoStatus = "Up to Date"
+            if ($status -match "Your branch is behind") {
+                Write-Host "Repository $($repo.Name) is behind the remote. Pulling changes..." -ForegroundColor Cyan
+                & "$GitPath" pull
+                $repoStatus = "Pulled"
             }
 
-            # Summary of repositories with pending push changes
-            if ($reposWithPushChanges.Count -gt 0) {
-                Write-Log -Message "The following repositories have pending push changes:" -Level "WARNING"
-                $reposWithPushChanges | ForEach-Object { Write-Log -Message $_ -Level "WARNING" }
+            if ($status -match "Your branch is ahead") {
+                Write-Host "Repository $($repo.Name) has unpushed changes." -ForegroundColor Yellow
+                $reposWithPushChanges.Add($repo.FullName)
+                $repoStatus = "Pending Push"
+            }
 
-                Write-Log -Message "Please manually commit and push the changes in these repositories." -Level "WARNING"
-            }
-            else {
-                Write-Log -Message "All repositories are up to date." -Level "INFO"
-            }
+            # Add the repository status to the summary list
+            $reposSummary.Add([pscustomobject]@{
+                    RepositoryName = $repo.Name
+                    Status         = $repoStatus
+                    LastChecked    = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                })
         }
-        catch {
-            Write-Log -Message "An error occurred while managing Git repositories: $_" -Level "ERROR"
-            throw $_
+
+        # Summary of repositories with pending push changes
+        if ($reposWithPushChanges.Count -gt 0) {
+            Write-Host "The following repositories have pending push changes:" -ForegroundColor Red
+            $reposWithPushChanges | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+
+            Write-Host "Please manually commit and push the changes in these repositories." -ForegroundColor Red
+        }
+        else {
+            Write-Host "All repositories are up to date." -ForegroundColor Green
         }
     }
 
     end {
-        # Summary output in Out-GridView
-        # $reposSummary | Out-GridView -Title "Git Repository Status Summary"
-
         # Summary output in the console with color coding
         $totalRepos = $reposSummary.Count
         $pulledRepos = $reposSummary | Where-Object { $_.Status -eq "Pulled" }
@@ -891,10 +1011,9 @@ function Manage-GitRepositories {
         # Return to the original location
         Set-Location -Path $ModulesBasePath
 
-        Write-Log -Message "Manage-GitRepositories function execution completed." -Level "INFO"
+        Write-EnhancedLog -Message "Manage-GitRepositories function execution completed." -Level "INFO"
     }
 }
-
 
 function Initialize-Environment {
     param (
@@ -909,20 +1028,22 @@ function Initialize-Environment {
 
         $gitInstalled = Ensure-GitIsInstalled
         if ($gitInstalled) {
-            Write-Log -Message "Git installation check completed successfully." -Level "INFO"
+            Write-EnhancedLog -Message "Git installation check completed successfully." -Level "INFO"
         }
         else {
-            Write-Log -Message "Failed to install Git." -Level "ERROR"
+            Write-EnhancedLog -Message "Failed to install Git." -Level "ERROR"
         }
 
 
         Manage-GitRepositories -ModulesBasePath 'C:\Code\modulesv2'
 
+        $DBG
+
         # Call Setup-GlobalPaths with custom paths
         Setup-GlobalPaths -ModulesBasePath $ModulesBasePath
         # Check if the directory exists and contains any files (not just the directory existence)
         if (-Not (Test-Path "$global:modulesBasePath\*.*")) {
-            Write-Log "Modules not found or directory is empty at $global:modulesBasePath. Initiating download..." -Level "INFO"
+            Write-EnhancedLog "Modules not found or directory is empty at $global:modulesBasePath. Initiating download..." -Level "INFO"
             Download-Modules -scriptDetails $scriptDetails
 
             # Re-check after download attempt
@@ -931,7 +1052,7 @@ function Initialize-Environment {
             }
         }
         else {
-            Write-Log "Source Modules already exist at $global:modulesBasePath" -Level "INFO"
+            Write-EnhancedLog "Source Modules already exist at $global:modulesBasePath" -Level "INFO"
         }
 
         # The following block will ONLY run in dev mode
@@ -949,7 +1070,7 @@ function Initialize-Environment {
         Import-Module -Name $global:modulePath -Verbose -Force:$true -Global:$true
 
         # Log the paths to verify
-        Write-Log "Module Path: $global:modulePath" -Level "INFO"
+        Write-EnhancedLog "Module Path: $global:modulePath" -Level "INFO"
 
         Write-Host "Starting to call Import-LatestModulesLocalRepository..."
         Import-ModulesFromLocalRepository -ModulesFolderPath $global:modulesBasePath
@@ -961,6 +1082,8 @@ function Initialize-Environment {
         # Path to the current script
         # $ScriptPath = $MyInvocation.MyCommand.Definition
 
+        
+
         # Re-launch the script in PowerShell 5 if not already running in PS5
         Invoke-InPowerShell5 -ScriptPath $ScriptPath
 
@@ -970,9 +1093,16 @@ function Initialize-Environment {
         # Ensure NuGet provider is installed
         Ensure-NuGetProvider
 
-        # Install essential modules
-        Install-Module -Name EnhancedBoilerPlateAO -Force -SkipPublisherCheck -Scope AllUsers -Verbose
-        Install-Module -Name EnhancedLoggingAO -Force -SkipPublisherCheck -Scope AllUsers -Verbose
+        
+
+        # # Install essential modules
+        # Install-Module -Name EnhancedBoilerPlateAO -Force -SkipPublisherCheck -Scope AllUsers -Verbose
+        # Install-Module -Name EnhancedLoggingAO -Force -SkipPublisherCheck -Scope AllUsers -Verbose
+
+        # Ensure that the latest versions of the essential modules are installed
+        Ensure-ModuleIsLatest -ModuleName "PSFramework"
+        Ensure-ModuleIsLatest -ModuleName "EnhancedBoilerPlateAO"
+        Ensure-ModuleIsLatest -ModuleName "EnhancedLoggingAO"
 
         # Define the PSD1 file URLs and local paths
         $psd1Url = "https://raw.githubusercontent.com/aollivierre/module-starter/main/Enhanced-modules.psd1"
@@ -986,10 +1116,10 @@ function Initialize-Environment {
 
         # Handle third-party PS Gallery modules
         if ($SkipPSGalleryModules) {
-            Write-Log "Skipping third-party PS Gallery Modules" -Level "INFO"
+            Write-EnhancedLog "Skipping third-party PS Gallery Modules" -Level "INFO"
         }
         else {
-            Write-Log "Starting PS Gallery Module installation" -Level "INFO"
+            Write-EnhancedLog "Starting PS Gallery Module installation" -Level "INFO"
 
             # Re-launch the script in PowerShell 5 if not already running in PS5
             Invoke-InPowerShell5 -ScriptPath $ScriptPath
@@ -1011,18 +1141,16 @@ function Initialize-Environment {
     }
 }
 
-
-# Elevate to administrator if not already
-# Example usage to check and optionally elevate:
-CheckAndElevate -ElevateIfNotAdmin $true
-
-
 # Example usage of Initialize-Environment
 $initializeParams = @{
     Mode              = $Mode
     WindowsModulePath = "EnhancedBoilerPlateAO\EnhancedBoilerPlateAO.psm1"
     ModulesBasePath   = "C:\code\modulesv2" # Custom modules base path
 }
+
+# Elevate to administrator if not already
+# Example usage to check and optionally elevate:
+CheckAndElevate -ElevateIfNotAdmin $true
 
 Initialize-Environment @initializeParams
 
