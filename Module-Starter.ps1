@@ -659,6 +659,25 @@ function Download-Psd1File {
 }
 
 
+
+function Ensure-NuGetProvider {
+    # Ensure NuGet provider and PowerShellGet module are installed if running in PowerShell 5
+    if ($PSVersionTable.PSVersion.Major -eq 5) {
+        if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+            Install-PackageProvider -Name NuGet -Force -Confirm:$false
+            Install-Module -Name PowerShellGet -Force -AllowClobber
+            Write-Log "NuGet provider installed successfully." -Level "INFO"
+        }
+        else {
+            Write-Log "NuGet provider is already installed." -Level "INFO"
+        }
+    }
+    else {
+        Write-Log "This script is running in PowerShell version $($PSVersionTable.PSVersion) which is not version 5. No action is taken for NuGet" -Level "INFO"
+    }
+}
+
+
 function Initialize-Environment {
     param (
         [string]$Mode, # Accepts either 'dev' or 'prod'
@@ -706,9 +725,26 @@ function Initialize-Environment {
         Import-ModulesFromLocalRepository -ModulesFolderPath $global:modulesBasePath
     }
     elseif ($Mode -eq "prod") {
+        # Log the start of the process
         Write-Log "Production mode selected. Importing modules..." -Level "INFO"
-        # Import-EnhancedModules
 
+        # Path to the current script
+        # $ScriptPath = $MyInvocation.MyCommand.Definition
+
+        # Re-launch the script in PowerShell 5 if not already running in PS5
+        Invoke-InPowerShell5 -ScriptPath $ScriptPath
+
+        # Reset the module paths and proceed with the rest of the script in PS5
+        Reset-ModulePaths
+
+        # Ensure NuGet provider is installed
+        Ensure-NuGetProvider
+
+        # Install essential modules
+        Install-Module -Name EnhancedBoilerPlateAO -Force -SkipPublisherCheck -Scope AllUsers -Verbose
+        Install-Module -Name EnhancedLoggingAO -Force -SkipPublisherCheck -Scope AllUsers -Verbose
+
+        # Define the PSD1 file URLs and local paths
         $psd1Url = "https://raw.githubusercontent.com/aollivierre/module-starter/main/Enhanced-modules.psd1"
         $localPsd1Path = "$env:TEMP\enhanced-modules.psd1"
 
@@ -716,60 +752,30 @@ function Initialize-Environment {
         Download-Psd1File -url $psd1Url -destinationPath $localPsd1Path
 
         # Install and import modules based on the PSD1 file
-        Import-EnhancedModules -modulePsd1Path $localPsd1Path -ScriptPath $ScriptPath
-        
+        InstallAndImportModulesPSGallery -modulePsd1Path $localPsd1Path
+
+        # Handle third-party PS Gallery modules
         if ($SkipPSGalleryModules) {
-
-            Write-Log "skipping third party PS Gallery Modules" -Level "INFO"
-
+            Write-Log "Skipping third-party PS Gallery Modules" -Level "INFO"
         }
-
         else {
+            Write-Log "Starting PS Gallery Module installation" -Level "INFO"
 
-
-            Write-Log "Starting PS Gallery Module installlation" -Level "INFO"
- 
-            # Function to re-launch the script in PowerShell 5 (x64) if it's not already running in PS5
-  
-            # Path to the current script
-            $ScriptPath = $MyInvocation.MyCommand.Definition
-
-            # Check if we need to re-launch in PowerShell 5
+            # Re-launch the script in PowerShell 5 if not already running in PS5
             Invoke-InPowerShell5 -ScriptPath $ScriptPath
 
-            # If running in PowerShell 5, reset the module paths and proceed with the rest of the script
+            # Reset the module paths in PS5
             Reset-ModulePaths
 
-            if ($PSVersionTable.PSVersion.Major -eq 5) {
-                # Check if the NuGet provider is already installed
-                if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
-                    # Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Confirm:$false
-                    Install-PackageProvider -Name NuGet -Force -Confirm:$false
-                    Install-Module -Name PowerShellGet -Force -AllowClobber
-                    Write-EnhancedLog "NuGet provider installed successfully."
-                }
-                else {
-                    Write-EnhancedLog "NuGet provider is already installed."
-                }
-            }
-            else {
-                Write-EnhancedLog "This script is running in PowerShell version $($PSVersionTable.PSVersion) which is not version 5. No action is taken for NuGet"
-            }
-    
+            # Ensure NuGet provider is installed
+            Ensure-NuGetProvider
 
-            # Example usage to download and use the PSD1 file from a GitHub repo
+            # Download and process the third-party modules PSD1 file
             $psd1Url = "https://raw.githubusercontent.com/aollivierre/module-starter/main/modules.psd1"
-            $localPsd1Path = "$env:TEMP\modules.psd1"  # Save the PSD1 file to a temporary location
+            $localPsd1Path = "$env:TEMP\modules.psd1"
     
-            # Download the PSD1 file
             Download-Psd1File -url $psd1Url -destinationPath $localPsd1Path
-
-            Write-EnhancedLog "Running in PowerShell 5. Executing the script..." -Level "INFO"
-
-            # Call the function to install and import modules using the downloaded PSD1 file
             InstallAndImportModulesPSGallery -modulePsd1Path $localPsd1Path
-
-
         }
 
     }
