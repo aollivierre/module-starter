@@ -1,5 +1,5 @@
 param (
-    [string]$Mode = "prod",
+    [string]$Mode = "dev",
     [bool]$SkipPSGalleryModules = $false
 )
 
@@ -182,7 +182,7 @@ function Invoke-WebScript {
         $startProcessParams = @{
             FilePath     = $powerShellPath
             ArgumentList = @(
-                # "-NoExit",
+                "-NoExit",
                 "-NoProfile",
                 "-ExecutionPolicy", "Bypass",
                 "-Command", "Invoke-Expression (Invoke-RestMethod -Uri '$url')"
@@ -234,7 +234,7 @@ function Validate-SoftwareInstallation {
                     if (Test-Path $RegistryPath) {
                         $app = Get-ItemProperty -Path $RegistryPath -ErrorAction SilentlyContinue
                         if ($app -and $app.DisplayName -like "*$SoftwareName*") {
-                            $installedVersion = [version]$app.DisplayVersion.Split(" ")[0]  # Extract only the version number
+                            $installedVersion = Sanitize-VersionString -versionString $app.DisplayVersion
                             if ($installedVersion -ge $MinVersion) {
                                 $validationSucceeded = $true
                                 return @{
@@ -252,7 +252,7 @@ function Validate-SoftwareInstallation {
                         foreach ($item in $items) {
                             $app = Get-ItemProperty -Path $item.PsPath -ErrorAction SilentlyContinue
                             if ($app.DisplayName -like "*$SoftwareName*") {
-                                $installedVersion = [version]$app.DisplayVersion.Split(" ")[0]  # Extract only the version number
+                                $installedVersion = Sanitize-VersionString -versionString $app.DisplayVersion
                                 if ($installedVersion -ge $MinVersion) {
                                     $validationSucceeded = $true
                                     return @{
@@ -271,7 +271,7 @@ function Validate-SoftwareInstallation {
             if ($ExePath) {
                 if (Test-Path $ExePath) {
                     $appVersionString = (Get-ItemProperty -Path $ExePath).VersionInfo.ProductVersion.Split(" ")[0]  # Extract only the version number
-                    $appVersion = [version]$appVersionString
+                    $appVersion = Sanitize-VersionString -versionString $appVersionString
 
                     if ($appVersion -ge $MinVersion) {
                         Write-Log -Message "Validation successful: $SoftwareName version $appVersion is installed at $ExePath." -Level "INFO"
@@ -302,6 +302,26 @@ function Validate-SoftwareInstallation {
         Write-Log -Message "Exiting Validate-SoftwareInstallation function" -Level "NOTICE"
     }
 }
+
+function Sanitize-VersionString {
+    param (
+        [string]$versionString
+    )
+
+    try {
+        # Remove any non-numeric characters and additional segments like ".windows"
+        $sanitizedVersion = $versionString -replace '[^0-9.]', '' -replace '\.\.+', '.'
+
+        # Convert to System.Version
+        $version = [version]$sanitizedVersion
+        return $version
+    }
+    catch {
+        Write-Log -Message "Failed to convert version string: $versionString. Error: $_" -Level "ERROR"
+        return $null
+    }
+}
+
 
 function Install-PowerShell7FromWeb {
     param (
@@ -685,6 +705,197 @@ function Ensure-NuGetProvider {
 }
 
 
+function Install-GitFromWeb {
+    param (
+        [string]$url = "https://raw.githubusercontent.com/aollivierre/setuplab/main/Install-Git.ps1"
+    )
+
+    Write-Log -Message "Attempting to install Git from URL: $url" -Level "INFO"
+
+    $process = Invoke-WebScript -url $url
+    if ($process) {
+        $process.WaitForExit()
+
+        # Perform post-installation validation
+        $validationParams = @{
+            SoftwareName        = "Git"
+            MinVersion          = [version]"2.46.0"
+            RegistryPath        = "HKLM:\SOFTWARE\GitForWindows"
+            ExePath             = "C:\Program Files\Git\bin\git.exe"
+            MaxRetries          = 3  # Single retry after installation
+            DelayBetweenRetries = 5
+        }
+
+        $postValidationResult = Validate-SoftwareInstallation @validationParams
+        if ($postValidationResult.IsInstalled -and $postValidationResult.Version -ge $validationParams.MinVersion) {
+            Write-Log -Message "Git successfully installed and validated." -Level "INFO"
+            return $true
+        }
+        else {
+            Write-Log -Message "Git installation validation failed." -Level "ERROR"
+            return $false
+        }
+    }
+    else {
+        Write-Log -Message "Failed to start the installation process for Git." -Level "ERROR"
+        return $false
+    }
+}
+
+
+function Ensure-GitIsInstalled {
+    param (
+        [version]$MinVersion = [version]"2.46.0",
+        [string]$RegistryPath = "HKLM:\SOFTWARE\GitForWindows",
+        [string]$ExePath = "C:\Program Files\Git\bin\git.exe"
+    )
+
+    Write-Log -Message "Checking if Git is installed and meets the minimum version requirement." -Level "INFO"
+
+    # Use the Validate-SoftwareInstallation function to check if Git is installed and meets the version requirement
+    $validationResult = Validate-SoftwareInstallation -SoftwareName "Git" -MinVersion $MinVersion -RegistryPath $RegistryPath -ExePath $ExePath
+
+    if ($validationResult.IsInstalled) {
+        Write-Log -Message "Git version $($validationResult.Version) is installed and meets the minimum version requirement." -Level "INFO"
+        return $true
+    }
+    else {
+        Write-Log -Message "Git is not installed or does not meet the minimum version requirement. Installing Git..." -Level "WARNING"
+        $installSuccess = Install-GitFromWeb
+        return $installSuccess
+    }
+}
+
+
+
+
+function Manage-GitRepositories {
+    <#
+    .SYNOPSIS
+    Manages Git repositories by pulling changes if behind, and identifying repositories with unpushed changes.
+
+    .DESCRIPTION
+    This function iterates through all Git repositories in the specified directory, pulls changes if the local branch is behind,
+    and logs repositories with pending push changes. It also provides a summary of the repository statuses.
+
+    .PARAMETER ModulesBasePath
+    The base path where the Git repositories are located.
+
+    .EXAMPLE
+    Manage-GitRepositories -ModulesBasePath 'C:\Code\modulesv2'
+    This example manages Git repositories in the specified path.
+
+    .NOTES
+    Ensure Git is installed and accessible via the command line.
+    #>
+
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$ModulesBasePath
+    )
+
+    begin {
+        Write-Log -Message "Starting Manage-GitRepositories function" -Level "INFO"
+        # Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
+
+        $reposWithPushChanges = [System.Collections.Generic.List[string]]::new()
+        $reposSummary = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+        # Validate ModulesBasePath
+        if (-not (Test-Path -Path $ModulesBasePath)) {
+            Write-Log -Message "Modules base path not found: $ModulesBasePath" -Level "ERROR"
+            throw "Modules base path not found."
+        }
+
+        Write-Log -Message "Found modules base path: $ModulesBasePath" -Level "INFO"
+    }
+
+    process {
+        try {
+            $repos = Get-ChildItem -Path $ModulesBasePath -Directory
+
+            foreach ($repo in $repos) {
+                try {
+                    Set-Location -Path $repo.FullName
+
+                    # Fetch the latest changes
+                    git fetch
+
+                    # Check for pending changes
+                    $status = git status
+
+                    $repoStatus = "Up to Date"
+                    if ($status -match "Your branch is behind") {
+                        Write-Log -Message "Repository $($repo.Name) is behind the remote. Pulling changes..." -Level "INFO"
+                        git pull
+                        $repoStatus = "Pulled"
+                    }
+
+                    if ($status -match "Your branch is ahead") {
+                        Write-Log -Message "Repository $($repo.Name) has unpushed changes." -Level "WARNING"
+                        $reposWithPushChanges.Add($repo.FullName)
+                        $repoStatus = "Pending Push"
+                    }
+
+                    # Add the repository status to the summary list
+                    $reposSummary.Add([pscustomobject]@{
+                            RepositoryName = $repo.Name
+                            Status         = $repoStatus
+                            LastChecked    = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                        })
+                }
+                catch {
+                    Write-Log -Message "Failed to process repository: $($repo.FullName). Error: $_" -Level "ERROR"
+                    $reposSummary.Add([pscustomobject]@{
+                            RepositoryName = $repo.Name
+                            Status         = "Error"
+                            LastChecked    = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                        })
+                }
+            }
+
+            # Summary of repositories with pending push changes
+            if ($reposWithPushChanges.Count -gt 0) {
+                Write-Log -Message "The following repositories have pending push changes:" -Level "WARNING"
+                $reposWithPushChanges | ForEach-Object { Write-Log -Message $_ -Level "WARNING" }
+
+                Write-Log -Message "Please manually commit and push the changes in these repositories." -Level "WARNING"
+            }
+            else {
+                Write-Log -Message "All repositories are up to date." -Level "INFO"
+            }
+        }
+        catch {
+            Write-Log -Message "An error occurred while managing Git repositories: $_" -Level "ERROR"
+            throw $_
+        }
+    }
+
+    end {
+        # Summary output in Out-GridView
+        # $reposSummary | Out-GridView -Title "Git Repository Status Summary"
+
+        # Summary output in the console with color coding
+        $totalRepos = $reposSummary.Count
+        $pulledRepos = $reposSummary | Where-Object { $_.Status -eq "Pulled" }
+        $pendingPushRepos = $reposSummary | Where-Object { $_.Status -eq "Pending Push" }
+        $upToDateRepos = $reposSummary | Where-Object { $_.Status -eq "Up to Date" }
+
+        Write-Host "---------- Summary Report ----------" -ForegroundColor Cyan
+        Write-Host "Total Repositories: $totalRepos" -ForegroundColor Cyan
+        Write-Host "Repositories Pulled: $($pulledRepos.Count)" -ForegroundColor Green
+        Write-Host "Repositories with Pending Push: $($pendingPushRepos.Count)" -ForegroundColor Yellow
+        Write-Host "Repositories Up to Date: $($upToDateRepos.Count)" -ForegroundColor Green
+
+        # Return to the original location
+        Set-Location -Path $ModulesBasePath
+
+        Write-Log -Message "Manage-GitRepositories function execution completed." -Level "INFO"
+    }
+}
+
+
 function Initialize-Environment {
     param (
         [string]$Mode, # Accepts either 'dev' or 'prod'
@@ -694,6 +905,18 @@ function Initialize-Environment {
 
  
     if ($Mode -eq "dev") {
+
+
+        $gitInstalled = Ensure-GitIsInstalled
+        if ($gitInstalled) {
+            Write-Log -Message "Git installation check completed successfully." -Level "INFO"
+        }
+        else {
+            Write-Log -Message "Failed to install Git." -Level "ERROR"
+        }
+
+
+        Manage-GitRepositories -ModulesBasePath 'C:\Code\modulesv2'
 
         # Call Setup-GlobalPaths with custom paths
         Setup-GlobalPaths -ModulesBasePath $ModulesBasePath
