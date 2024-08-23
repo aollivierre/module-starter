@@ -1,13 +1,27 @@
 param (
-    [string]$Mode = "dev",
+    [string]$Mode = "prod",
     [bool]$SkipPSGalleryModules = $false
 )
 
 Write-Host "The script is running in mode: $Mode"
 Write-Host "The SkipPSGalleryModules is set to: $SkipPSGalleryModules"
 
+# Script to report the current PowerShell version
+
+# Get the PowerShell version details
+$psVersion = $PSVersionTable.PSVersion
+
+# Output the PowerShell version
+Write-Host "Current PowerShell Version: $psVersion" -ForegroundColor Green
+
+# Output additional details
+Write-Host "Full PowerShell Version Details:"
+$PSVersionTable | Format-Table -AutoSize
+
+
 
 $processList = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
+$ScriptPath = $MyInvocation.MyCommand.Definition
 $scriptDetails = @(
     @{ Url = "https://raw.githubusercontent.com/aollivierre/module-starter/main/Clone-EnhancedRepos.ps1" }
 )
@@ -384,25 +398,144 @@ function Download-Modules {
     }
 }
 
+function Invoke-InPowerShell5 {
+    param (
+        [string]$ScriptPath
+    )
+
+    if ($PSVersionTable.PSVersion.Major -ne 5) {
+        Write-Log "Relaunching script in PowerShell 5 (x64)..." -Level "WARNING"
+
+        # Get the path to PowerShell 5 (x64)
+        $ps5x64Path = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+
+        # Launch in PowerShell 5 (x64)
+        $startProcessParams64 = @{
+            FilePath     = $ps5x64Path
+            ArgumentList = @(
+                "-NoExit",
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", "`"$ScriptPath`""
+            )
+            Verb         = "RunAs"
+            PassThru     = $true
+        }
+
+        Write-Log "Starting PowerShell 5 (x64) to perform the update..." -Level "NOTICE"
+        $process64 = Start-Process @startProcessParams64
+        $process64.WaitForExit()
+
+        Write-Log "PowerShell 5 (x64) process completed." -Level "NOTICE"
+        Exit
+    }
+}
+
+function Reset-ModulePaths {
+    [CmdletBinding()]
+    param ()
+
+    begin {
+        # Initialization block, typically used for setup tasks
+        Write-Log "Initializing Reset-ModulePaths function..." -Level "DEBUG"
+    }
+
+    process {
+        try {
+            # Log the start of the process
+            Write-Log "Resetting module paths to default values..." -Level "INFO"
+
+            # Get the current user's Documents path
+            $userModulesPath = [System.IO.Path]::Combine($env:USERPROFILE, 'Documents\WindowsPowerShell\Modules')
+
+            # Define the default module paths
+            $defaultModulePaths = @(
+                "C:\Program Files\WindowsPowerShell\Modules",
+                $userModulesPath,
+                "C:\Windows\System32\WindowsPowerShell\v1.0\Modules"
+            )
+
+            # Attempt to reset the PSModulePath environment variable
+            $env:PSModulePath = [string]::Join(';', $defaultModulePaths)
+            Write-Log "PSModulePath successfully set to: $($env:PSModulePath -split ';' | Out-String)" -Level "INFO"
+
+            # Optionally persist the change for the current user
+            [Environment]::SetEnvironmentVariable("PSModulePath", $env:PSModulePath, [EnvironmentVariableTarget]::User)
+            Write-Log "PSModulePath environment variable set for the current user." -Level "INFO"
+        }
+        catch {
+            # Capture and log any errors that occur during the process
+            $errorMessage = $_.Exception.Message
+            Write-Log "Error resetting module paths: $errorMessage" -Level "ERROR"
+
+            # Optionally, you could throw the error to halt the script
+            throw $_
+        }
+    }
+
+    end {
+        # Finalization block, typically used for cleanup tasks
+        Write-Log "Reset-ModulePaths function completed." -Level "DEBUG"
+    }
+}
+
 function Install-EnhancedModule {
     param (
         [string]$ModuleName
     )
 
-    # Logic to install the module
-    Write-Log "Installing module: $ModuleName" -Level "INFO"
+    # Log the start of the module installation process
+    Write-Log "Starting the module installation process for: $ModuleName" -Level "NOTICE"
+
+    # Check if the current PowerShell version is not 5
+    # if ($PSVersionTable.PSVersion.Major -ne 5) {
+    # Write-Log "Current PowerShell version is $($PSVersionTable.PSVersion). PowerShell 5 is required." -Level "WARNING"
+
+    # # Get the path to PowerShell 5
+    # $ps5Path = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+    # Write-Log "PowerShell 5 path: $ps5Path" -Level "INFO"
+
+    # # Construct the command to install the module in PowerShell 5
+    # $command = "& '$ps5Path' -ExecutionPolicy Bypass -Command `"Install-Module -Name '$ModuleName' -Force -SkipPublisherCheck -Scope AllUsers`""
+    # Write-Log "Constructed command for PowerShell 5: $command" -Level "DEBUG"
+
+    # # Launch PowerShell 5 to run the module installation
+    # Write-Log "Launching PowerShell 5 to install the module: $ModuleName" -Level "INFO"
+    # Invoke-Expression $command
+
+    # Write-Log "Module installation command executed in PowerShell 5. Exiting current session." -Level "NOTICE"
+    # return
+
+    # Path to the current script
+    # $ScriptPath = $MyInvocation.MyCommand.Definition
+
+    # # Check if we need to re-launch in PowerShell 5
+    # Invoke-InPowerShell5 -ScriptPath $ScriptPath
+
+    # # If running in PowerShell 5, reset the module paths and proceed with the rest of the script
+    # Reset-ModulePaths
+
+    # }
+
+    # If already in PowerShell 5, install the module
+    Write-Log "Current PowerShell version is 5. Proceeding with module installation." -Level "INFO"
+    Write-Log "Installing module: $ModuleName in PowerShell 5" -Level "NOTICE"
 
     try {
-        Install-Module -Name $ModuleName -Force -Scope AllUsers
+        Install-Module -Name $ModuleName -Force -SkipPublisherCheck -Scope AllUsers
+        Write-Log "Module $ModuleName installed successfully in PowerShell 5." -Level "INFO"
     }
     catch {
         Write-Log "Failed to install module $ModuleName. Error: $_" -Level "ERROR"
     }
 }
 
+
+
 function Import-EnhancedModules {
     param (
-        [string]$modulePsd1Path  # Path to the PSD1 file containing the list of modules to install and import
+        [string]$modulePsd1Path, # Path to the PSD1 file containing the list of modules to install and import
+        [string]$ScriptPath  # Path to the PSD1 file containing the list of modules to install and import
     )
 
     # Validate PSD1 file path
@@ -411,6 +544,13 @@ function Import-EnhancedModules {
         throw "modules.psd1 file not found."
     }
 
+
+    # Check if we need to re-launch in PowerShell 5
+    Invoke-InPowerShell5 -ScriptPath $ScriptPath
+
+    # If running in PowerShell 5, reset the module paths and proceed with the rest of the script
+    Reset-ModulePaths
+
     # Import the PSD1 data
     $moduleData = Import-PowerShellDataFile -Path $modulePsd1Path
     $modulesToImport = $moduleData.requiredModules
@@ -418,7 +558,7 @@ function Import-EnhancedModules {
     foreach ($moduleName in $modulesToImport) {
         if (-not (Get-Module -ListAvailable -Name $moduleName)) {
             Write-Log "Module $moduleName is not installed. Attempting to install..." -Level "INFO"
-            Install-EnhancedModule -ModuleName $moduleName
+            Install-EnhancedModule -ModuleName $moduleName -ScriptPath $ScriptPath
         }
 
         Write-Log "Importing module: $moduleName" -Level "INFO"
@@ -570,7 +710,7 @@ function Initialize-Environment {
         Download-Psd1File -url $psd1Url -destinationPath $localPsd1Path
 
         # Install and import modules based on the PSD1 file
-        Import-EnhancedModules -modulePsd1Path $localPsd1Path
+        Import-EnhancedModules -modulePsd1Path $localPsd1Path -ScriptPath $ScriptPath
 
     }
 }
@@ -605,18 +745,82 @@ if ($SkipPSGalleryModules) {
 
 else {
 
+    
+    # Call the function to install and import modules using the downloaded PSD1 file
+
+    $DBG
+    # InstallAndImportModulesPSGallery -modulePsd1Path $localPsd1Path
+
+    # Function to install and import modules from PSGallery
+    # function InstallAndImportModulesPSGallerywithPS5Fllback {
+    #     param (
+    #         [string]$modulePsd1Path
+    #     )
+
+    #     Write-Host "Installing and importing modules specified in $modulePsd1Path..." -ForegroundColor Green
+    #     # Add your logic here to install and import modules using the psd1 file
+    #     # This is just a placeholder for the actual function logic
+    # }
+
+    # # Check if running in PowerShell 5
+    # if ($PSVersionTable.PSVersion.Major -ne 5) {
+    #     Write-Host "Not running in PS5. Attempting to launch PowerShell 5..." -ForegroundColor Yellow
+
+    #     # Get the path to PowerShell 5
+    #     $ps5Path = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+
+    #     # Construct the command to re-launch the entire script in PowerShell 5
+    #     $scriptPath = $MyInvocation.MyCommand.Definition
+    #     $command = "& '$ps5Path' -NoProfile -ExecutionPolicy Bypass -File '$scriptPath'"
+
+    #     Write-Host "Launching PowerShell 5 with command: $command" -ForegroundColor Cyan
+
+    #     $DBG
+    #     Invoke-Expression $command
+
+    #     # Exit the current PowerShell session to avoid running the script twice
+    #     Exit
+    # }
+    # else {
+    #     Write-Host "Running in PowerShell 5. Executing the script directly..." -ForegroundColor Green
+    
+    #     # Place your script logic here, including the call to InstallAndImportModulesPSGallery
+    #     # Example function call:
+    #     InstallAndImportModulesPSGallery -modulePsd1Path $localPsd1Path
+    # }
+
+
+
+ 
+    # Function to re-launch the script in PowerShell 5 (x64) if it's not already running in PS5
+  
+    # Path to the current script
+    $ScriptPath = $MyInvocation.MyCommand.Definition
+
+    # Check if we need to re-launch in PowerShell 5
+    Invoke-InPowerShell5 -ScriptPath $ScriptPath
+
+    # If running in PowerShell 5, reset the module paths and proceed with the rest of the script
+    Reset-ModulePaths
+
+
+
+
+    
     if ($PSVersionTable.PSVersion.Major -eq 5) {
         # Check if the NuGet provider is already installed
         if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
-            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Confirm:$false
-            Write-Host "NuGet provider installed successfully."
+            # Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Confirm:$false
+            Install-PackageProvider -Name NuGet -Force -Confirm:$false
+            Install-Module -Name PowerShellGet -Force -AllowClobber
+            Write-EnhancedLog "NuGet provider installed successfully."
         }
         else {
-            Write-Host "NuGet provider is already installed."
+            Write-EnhancedLog "NuGet provider is already installed."
         }
     }
     else {
-        Write-Host "This script is running in PowerShell version $($PSVersionTable.PSVersion) which is not version 5. No action is taken."
+        Write-EnhancedLog "This script is running in PowerShell version $($PSVersionTable.PSVersion) which is not version 5. No action is taken for NuGet"
     }
     
 
@@ -626,9 +830,16 @@ else {
     
     # Download the PSD1 file
     Download-Psd1File -url $psd1Url -destinationPath $localPsd1Path
-    
-    # Call the function to install and import modules using the downloaded PSD1 file
+
+    Write-EnhancedLog "Running in PowerShell 5. Executing the script..." -Level "INFO"
+
     InstallAndImportModulesPSGallery -modulePsd1Path $localPsd1Path
+
+
+
+    # InstallAndImportModulesPSGallerywithPS5Fllback
+
+
 }
 
 
