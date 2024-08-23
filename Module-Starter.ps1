@@ -48,14 +48,14 @@ function Write-Log {
 }
 
 # Function to get the platform
-function Get-Platform {
-    if ($PSVersionTable.PSVersion.Major -ge 7) {
-        return $PSVersionTable.Platform
-    }
-    else {
-        return [System.Environment]::OSVersion.Platform
-    }
-}
+# function Get-Platform {
+#     if ($PSVersionTable.PSVersion.Major -ge 7) {
+#         return $PSVersionTable.Platform
+#     }
+#     else {
+#         return [System.Environment]::OSVersion.Platform
+#     }
+# }
 
 
 function Get-PowerShellPath {
@@ -402,7 +402,7 @@ function Invoke-WebScript {
         [string]$url
     )
 
-    $powerShellPath = Get-PowerShellPath
+    $powerShellPath = Get-PowerShellPath -ForcePowerShell5
 
     Write-EnhancedLog "Validating URL: $url" -Level "INFO"
 
