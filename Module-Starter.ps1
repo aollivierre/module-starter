@@ -951,47 +951,66 @@ function Manage-GitRepositories {
     }
 
     process {
-        $repos = Get-ChildItem -Path $ModulesBasePath -Directory
+        try {
+            $repos = Get-ChildItem -Path $ModulesBasePath -Directory
 
-        foreach ($repo in $repos) {
-            Set-Location -Path $repo.FullName
+            foreach ($repo in $repos) {
+                Set-Location -Path $repo.FullName
 
-            # Fetch the latest changes
-            & "$GitPath" fetch
+                # Add the repository to Git's safe directories
+                & "$GitPath" config --global --add safe.directory "$($repo.FullName)"
 
-            # Check for pending changes
-            $status = & "$GitPath" status
+                # Fetch the latest changes
+                $fetchOutput = & "$GitPath" fetch
+                if ($fetchOutput -match "fatal:") {
+                    Write-EnhancedLog -Message "Error during fetch in repository $($repo.Name): $fetchOutput" -Level "ERROR"
+                    continue
+                }
 
-            $repoStatus = "Up to Date"
-            if ($status -match "Your branch is behind") {
-                Write-Host "Repository $($repo.Name) is behind the remote. Pulling changes..." -ForegroundColor Cyan
-                & "$GitPath" pull
-                $repoStatus = "Pulled"
-            }
+                # Check for pending changes
+                $status = & "$GitPath" status
+                if ($status -match "fatal:") {
+                    Write-EnhancedLog -Message "Error during status check in repository $($repo.Name): $status" -Level "ERROR"
+                    continue
+                }
 
-            if ($status -match "Your branch is ahead") {
-                Write-Host "Repository $($repo.Name) has unpushed changes." -ForegroundColor Yellow
-                $reposWithPushChanges.Add($repo.FullName)
-                $repoStatus = "Pending Push"
-            }
+                $repoStatus = "Up to Date"
+                if ($status -match "Your branch is behind") {
+                    Write-EnhancedLog -Message "Repository $($repo.Name) is behind the remote. Pulling changes..." -Level "INFO"
+                    $pullOutput = & "$GitPath" pull
+                    if ($pullOutput -match "fatal:") {
+                        Write-EnhancedLog -Message "Error during pull in repository $($repo.Name): $pullOutput" -Level "ERROR"
+                        continue
+                    }
+                    $repoStatus = "Pulled"
+                }
 
-            # Add the repository status to the summary list
-            $reposSummary.Add([pscustomobject]@{
+                if ($status -match "Your branch is ahead") {
+                    Write-EnhancedLog -Message "Repository $($repo.Name) has unpushed changes." -Level "WARNING"
+                    $reposWithPushChanges.Add($repo.FullName)
+                    $repoStatus = "Pending Push"
+                }
+
+                # Add the repository status to the summary list
+                $reposSummary.Add([pscustomobject]@{
                     RepositoryName = $repo.Name
                     Status         = $repoStatus
                     LastChecked    = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
                 })
-        }
+            }
 
-        # Summary of repositories with pending push changes
-        if ($reposWithPushChanges.Count -gt 0) {
-            Write-Host "The following repositories have pending push changes:" -ForegroundColor Red
-            $reposWithPushChanges | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+            # Summary of repositories with pending push changes
+            if ($reposWithPushChanges.Count -gt 0) {
+                Write-EnhancedLog -Message "The following repositories have pending push changes:" -Level "WARNING"
+                $reposWithPushChanges | ForEach-Object { Write-EnhancedLog -Message $_ -Level "WARNING" }
 
-            Write-Host "Please manually commit and push the changes in these repositories." -ForegroundColor Red
-        }
-        else {
-            Write-Host "All repositories are up to date." -ForegroundColor Green
+                Write-EnhancedLog -Message "Please manually commit and push the changes in these repositories." -Level "WARNING"
+            } else {
+                Write-EnhancedLog -Message "All repositories are up to date." -Level "INFO"
+            }
+        } catch {
+            Write-EnhancedLog -Message "An error occurred while managing Git repositories: $_" -Level "ERROR"
+            throw $_
         }
     }
 
