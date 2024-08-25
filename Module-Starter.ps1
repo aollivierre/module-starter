@@ -6,6 +6,7 @@ param (
 
 Write-Host "The script is running in mode: $Mode"
 Write-Host "The SkipPSGalleryModules is set to: $SkipPSGalleryModules"
+Write-Host "The SkipCheckandElevate is set to: $SkipCheckandElevate"
 
 # Script to report the current PowerShell version
 
