@@ -1,6 +1,7 @@
 param (
     [string]$Mode = "dev",
-    [bool]$SkipPSGalleryModules = $false
+    [bool]$SkipPSGalleryModules = $false,
+    [bool]$SkipCheckandElevate = $false
 )
 
 Write-Host "The script is running in mode: $Mode"
@@ -315,8 +316,13 @@ function Ensure-ModuleIsLatest {
 
     try {
 
-        CheckAndElevate -ElevateIfNotAdmin $true
-
+        if ($SkipCheckandElevate) {
+            Write-EnhancedLog -Message "Skipping CheckAndElevate due to SkipCheckandElevate parameter." -Level "INFO"
+        }
+        else {
+            CheckAndElevate -ElevateIfNotAdmin $true
+        }
+        
         Invoke-InPowerShell5
 
         Reset-ModulePaths
@@ -993,10 +999,10 @@ function Manage-GitRepositories {
 
                 # Add the repository status to the summary list
                 $reposSummary.Add([pscustomobject]@{
-                    RepositoryName = $repo.Name
-                    Status         = $repoStatus
-                    LastChecked    = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-                })
+                        RepositoryName = $repo.Name
+                        Status         = $repoStatus
+                        LastChecked    = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+                    })
             }
 
             # Summary of repositories with pending push changes
@@ -1005,10 +1011,12 @@ function Manage-GitRepositories {
                 $reposWithPushChanges | ForEach-Object { Write-EnhancedLog -Message $_ -Level "WARNING" }
 
                 Write-EnhancedLog -Message "Please manually commit and push the changes in these repositories." -Level "WARNING"
-            } else {
+            }
+            else {
                 Write-EnhancedLog -Message "All repositories are up to date." -Level "INFO"
             }
-        } catch {
+        }
+        catch {
             Write-EnhancedLog -Message "An error occurred while managing Git repositories: $_" -Level "ERROR"
             throw $_
         }
@@ -1169,7 +1177,12 @@ $initializeParams = @{
 
 # Elevate to administrator if not already
 # Example usage to check and optionally elevate:
-CheckAndElevate -ElevateIfNotAdmin $true
+if ($SkipCheckandElevate) {
+    Write-EnhancedLog -Message "Skipping CheckAndElevate due to SkipCheckandElevate parameter." -Level "INFO"
+}
+else {
+    CheckAndElevate -ElevateIfNotAdmin $true
+}
 
 Initialize-Environment @initializeParams
 
