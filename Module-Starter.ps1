@@ -1,7 +1,9 @@
 param (
     [string]$Mode = "dev",
     [bool]$SkipPSGalleryModules = $false,
-    [bool]$SkipCheckandElevate = $false
+    [bool]$SkipCheckandElevate = $false,
+    [bool]$SkipPowerShell7Install = $false,
+    [bool]$SkipModuleDownload = $false
 )
 
 Write-Host "The script is running in mode: $Mode"
@@ -97,11 +99,22 @@ function Get-PowerShellPath {
             }
             else {
                 Write-Log -Message "PowerShell 7 not found. Attempting to install (Attempt $($attempt + 1) of $maxAttempts)..." -Level "WARNING"
-                $success = Install-PowerShell7FromWeb
-                if ($success) {
-                    Write-Log -Message "PowerShell 7 installed successfully." -Level "INFO"
-                    return $pwsh7Path
+                
+                if (-not $SkipPowerShell7Install) {
+                    $success = Install-PowerShell7FromWeb
+                    if ($success) {
+                        Write-Log -Message "PowerShell 7 installed successfully." -Level "INFO"
+                        return $pwsh7Path
+                    }
+                    else {
+                        Write-Log -Message "Failed to install PowerShell 7." -Level "ERROR"
+                        return $null
+                    }
                 }
+                else {
+                    Write-Log -Message "Skipping PowerShell 7 installation as per the provided parameter." -Level "INFO"
+                }
+            
             }
             $attempt++
         }
@@ -1072,7 +1085,19 @@ function Initialize-Environment {
         # Check if the directory exists and contains any files (not just the directory existence)
         if (-Not (Test-Path "$global:modulesBasePath\*.*")) {
             Write-EnhancedLog "Modules not found or directory is empty at $global:modulesBasePath. Initiating download..." -Level "INFO"
-            Download-Modules -scriptDetails $scriptDetails
+            # Download-Modules -scriptDetails $scriptDetails
+
+            if (-not $SkipModuleDownload) {
+                Download-Modules -scriptDetails $scriptDetails
+                Write-Log -Message "Modules downloaded successfully." -Level "INFO"
+            }
+            else {
+                Write-Log -Message "Skipping module download as per the provided parameter." -Level "INFO"
+            }
+
+            # The rest of your script continues here...
+
+
 
             # Re-check after download attempt
             if (-Not (Test-Path "$global:modulesBasePath\*.*")) {
