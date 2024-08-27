@@ -253,8 +253,6 @@ function Clone-EnhancedRepos {
      
    
         
-
-
         try {
             # Get the Git executable path
             Write-Log -Message "Attempting to find Git executable path..." -Level "INFO"
@@ -291,8 +289,15 @@ function Clone-EnhancedRepos {
             # Clone each repository using the full path to Git
             foreach ($repo in $filteredRepos) {
                 $repoName = $repo.name
-                $repoCloneUrl = $repo.url
                 $repoTargetPath = Join-Path -Path $targetDirectory -ChildPath $repoName
+        
+                # Check if the repository already exists in the target directory
+                if (Test-Path $repoTargetPath) {
+                    Write-Log -Message "Repository $repoName already exists in $repoTargetPath. Skipping clone." -Level "INFO"
+                    continue
+                }
+        
+                $repoCloneUrl = $repo.url
         
                 # Define arguments for Git as an array
                 $gitArguments = @("clone", $repoCloneUrl, $repoTargetPath)
@@ -311,6 +316,7 @@ function Clone-EnhancedRepos {
             Write-Log -Message "Error during cloning process: $_" -Level "ERROR"
             throw $_
         }
+        
         
         
         
@@ -435,7 +441,7 @@ try {
     }
 
     # Example invocation to clone repositories:
-    Clone-EnhancedRepos -githubUsername "aollivierre" -targetDirectory "C:\Code\modulesv2-beta10"
+    Clone-EnhancedRepos -githubUsername "aollivierre" -targetDirectory "C:\Code\modulesv2"
 
 }
 catch {
