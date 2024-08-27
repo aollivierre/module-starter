@@ -7,6 +7,8 @@
 # iex ((irm "https://raw.githubusercontent.com/aollivierre/module-starter/main/Module-Starter.ps1") -replace '\$Mode = "dev"', '$Mode = "dev"' -replace 'SkipPSGalleryModules\s*=\s*false', 'SkipPSGalleryModules = false' -replace '\$SkipCheckandElevate = \$false', '$SkipCheckandElevate = $true')
 
 
+iex (irm 'https://raw.githubusercontent.com/aollivierre/module-starter/main/Clone-EnhancedRepos.ps1')
+
 
 # Fetch the script content
 $scriptContent = Invoke-RestMethod "https://raw.githubusercontent.com/aollivierre/module-starter/main/Module-Starter.ps1"
@@ -18,7 +20,7 @@ $replacements = @{
     '\$SkipCheckandElevate = \$false'    = '$SkipCheckandElevate = $true'
     '\$SkipAdminCheck = \$false'         = '$SkipAdminCheck = $true'
     '\$SkipPowerShell7Install = \$false' = '$SkipPowerShell7Install = $true'
-    '\$SkipModuleDownload = \$false'     = '$SkipModuleDownload = $true'
+    '\$SkipModuleDownload = \$false'     = '$SkipModuleDownload = $false'
 }
 
 # Apply the replacements

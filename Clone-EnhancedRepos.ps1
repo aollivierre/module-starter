@@ -156,6 +156,58 @@ function Validate-Installation {
 }
 
 
+function Get-GitPath {
+    <#
+    .SYNOPSIS
+    Discovers the path to the Git executable on the system.
+
+    .DESCRIPTION
+    This function attempts to find the Git executable by checking common installation directories and the system's PATH environment variable.
+
+    .EXAMPLE
+    $gitPath = Get-GitPath
+    if ($gitPath) {
+        Write-Host "Git found at: $gitPath"
+    } else {
+        Write-Host "Git not found."
+    }
+    #>
+
+    [CmdletBinding()]
+    param ()
+
+    try {
+        # Common Git installation paths
+        $commonPaths = @(
+            "C:\Program Files\Git\bin\git.exe",
+            "C:\Program Files (x86)\Git\bin\git.exe"
+        )
+
+        # Check the common paths
+        foreach ($path in $commonPaths) {
+            if (Test-Path -Path $path) {
+                Write-EnhancedLog -Message "Git found at: $path" -Level "INFO"
+                return $path
+            }
+        }
+
+        # If not found, check if Git is in the system PATH
+        $gitPathInEnv = (Get-Command git -ErrorAction SilentlyContinue).Source
+        if ($gitPathInEnv) {
+            Write-EnhancedLog -Message "Git found in system PATH: $gitPathInEnv" -Level "INFO"
+            return $gitPathInEnv
+        }
+
+        # If Git is still not found, return $null
+        Write-EnhancedLog -Message "Git executable not found." -Level "ERROR"
+        return $null
+    }
+    catch {
+        Write-EnhancedLog -Message "Error occurred while trying to find Git path: $_" -Level "ERROR"
+        return $null
+    }
+}
+
 function Clone-EnhancedRepos {
     <#
     .SYNOPSIS
@@ -199,23 +251,30 @@ function Clone-EnhancedRepos {
 
     process {
         try {
+            # Get the Git executable path
+            $gitPath = Get-GitPath
+            if (-not $gitPath) {
+                throw "Git executable not found. Please install Git or ensure it is in your PATH."
+            }
+        
             # Get the list of repositories using the full path to GitHub CLI
             Write-Log -Message "Retrieving repositories for user $githubUsername using GitHub CLI..." -Level "INFO"
-            $reposJson = & "C:\Program Files\GitHub CLI\gh.exe" repo list $githubUsername --json name,url --jq '.[] | select(.name | startswith("Enhanced"))'
-            $repos = $reposJson | ConvertFrom-Json
-
-            # Clone each repository
+            $reposJson = & "C:\Program Files\GitHub CLI\gh.exe" repo list $githubUsername --json name, url
+            $repos = $reposJson | ConvertFrom-Json | Where-Object { $_.name -like "Enhanced*" }
+        
+            # Clone each repository using the full path to Git
             foreach ($repo in $repos) {
                 $repoName = $repo.name
                 $repoCloneUrl = $repo.url
                 $repoTargetPath = Join-Path -Path $targetDirectory -ChildPath $repoName
-
+        
                 Write-Log -Message "Cloning repository $repoName to $repoTargetPath..." -Level "INFO"
-                git clone $repoCloneUrl $repoTargetPath
+                & $gitPath clone $repoCloneUrl $repoTargetPath
             }
-
+        
             Write-Log -Message "Cloning process completed." -Level "INFO"
-        } catch {
+        }
+        catch {
             Write-Log -Message "Error during cloning process: $_" -Level "ERROR"
             throw $_
         }
@@ -339,7 +398,7 @@ try {
     }
 
     # Example invocation to clone repositories:
-    Clone-EnhancedRepos -githubUsername "aollivierre" -targetDirectory "C:\Code\modulesv2"
+    Clone-EnhancedRepos -githubUsername "aollivierre" -targetDirectory "C:\Code\modulesv2-beta7"
 
 }
 catch {
