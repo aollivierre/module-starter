@@ -236,7 +236,7 @@ function Clone-EnhancedRepos {
         [string]$githubUsername,
 
         [Parameter(Mandatory = $true)]
-        [string]$targetDirectory = "C:\Code\modules-beta4"
+        [string]$targetDirectory
     )
 
     begin {
@@ -250,26 +250,59 @@ function Clone-EnhancedRepos {
     }
 
     process {
+     
+   
+        
+
+
         try {
             # Get the Git executable path
+            Write-Log -Message "Attempting to find Git executable path..." -Level "INFO"
             $gitPath = Get-GitPath
             if (-not $gitPath) {
                 throw "Git executable not found. Please install Git or ensure it is in your PATH."
             }
+            Write-Log -Message "Git found at: $gitPath" -Level "INFO"
         
-            # Get the list of repositories using the full path to GitHub CLI
+            # Set the GitHub CLI path
+            $ghPath = "C:\Program Files\GitHub CLI\gh.exe"
+            
+            # Define arguments for GitHub CLI as an array
+            $ghArguments = @("repo", "list", "aollivierre", "--json", "name,url")
+        
+            # Execute the GitHub CLI command using the argument array
             Write-Log -Message "Retrieving repositories for user $githubUsername using GitHub CLI..." -Level "INFO"
-            $reposJson = & "C:\Program Files\GitHub CLI\gh.exe" repo list $githubUsername --json name, url
-            $repos = $reposJson | ConvertFrom-Json | Where-Object { $_.name -like "Enhanced*" }
+            $reposJson = & $ghPath $ghArguments
+            Write-Log -Message "Raw GitHub CLI output: $reposJson" -Level "DEBUG"
+            
+            if (-not $reposJson) {
+                throw "No repositories found or an error occurred while retrieving repositories."
+            }
         
+            $repos = $reposJson | ConvertFrom-Json
+            Write-Log -Message "Converted JSON output: $repos" -Level "DEBUG"
+        
+            $filteredRepos = $repos | Where-Object { $_.name -like "Enhanced*" }
+            if ($filteredRepos.Count -eq 0) {
+                Write-Log -Message "No repositories found that match 'Enhanced*'." -Level "WARNING"
+            }
+            Write-Log -Message "Filtered repositories count: $($filteredRepos.Count)" -Level "INFO"
+            
             # Clone each repository using the full path to Git
-            foreach ($repo in $repos) {
+            foreach ($repo in $filteredRepos) {
                 $repoName = $repo.name
                 $repoCloneUrl = $repo.url
                 $repoTargetPath = Join-Path -Path $targetDirectory -ChildPath $repoName
         
+                # Define arguments for Git as an array
+                $gitArguments = @("clone", $repoCloneUrl, $repoTargetPath)
+        
                 Write-Log -Message "Cloning repository $repoName to $repoTargetPath..." -Level "INFO"
-                & $gitPath clone $repoCloneUrl $repoTargetPath
+                & $gitPath $gitArguments
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Failed to clone repository $repoName. Git returned exit code $LASTEXITCODE."
+                }
+                Write-Log -Message "Successfully cloned repository $repoName." -Level "INFO"
             }
         
             Write-Log -Message "Cloning process completed." -Level "INFO"
@@ -278,6 +311,10 @@ function Clone-EnhancedRepos {
             Write-Log -Message "Error during cloning process: $_" -Level "ERROR"
             throw $_
         }
+        
+        
+        
+
     }
 
     end {
@@ -398,7 +435,7 @@ try {
     }
 
     # Example invocation to clone repositories:
-    Clone-EnhancedRepos -githubUsername "aollivierre" -targetDirectory "C:\Code\modulesv2"
+    Clone-EnhancedRepos -githubUsername "aollivierre" -targetDirectory "C:\Code\modulesv2-beta10"
 
 }
 catch {
