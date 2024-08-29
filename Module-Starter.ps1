@@ -3,7 +3,8 @@ param (
     [bool]$SkipPSGalleryModules = $false,
     [bool]$SkipCheckandElevate = $false,
     [bool]$SkipPowerShell7Install = $false,
-    [bool]$SkipModuleDownload = $false
+    [bool]$SkipModuleDownload = $false,
+    [bool]$SkipGitRepos = $false
 )
 
 Write-Host "The Module Starter script is running in mode: $Mode"
@@ -11,6 +12,7 @@ Write-Host "The Module Starter SkipPSGalleryModules is set to: $SkipPSGalleryMod
 Write-Host "The Module Starter SkipCheckandElevate is set to: $SkipCheckandElevate"
 Write-Host "The Module Starter SkipPowerShell7Install is set to: $SkipPowerShell7Install"
 Write-Host "The Module Starter SkipModuleDownload is set to: $SkipModuleDownload"
+Write-Host "The Module Starter SkipGitRepos is set to: $SkipGitRepos"
 
 # Script to report the current PowerShell version
 
@@ -1078,7 +1080,14 @@ function Initialize-Environment {
         }
 
 
-        Manage-GitRepositories -ModulesBasePath 'C:\Code\modulesv2'
+        if (-not $SkipGitRepos) {
+            Manage-GitRepositories -ModulesBasePath 'C:\Code\modulesv2'
+            Write-Log -Message "Git repose checked successfully." -Level "INFO"
+        }
+        else {
+            Write-Log -Message "Skipping Git Repos" -Level "INFO"
+        }
+       
 
         $DBG
 
