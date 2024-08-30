@@ -59,7 +59,7 @@ function Write-Log {
     }
 
     # Append to log file
-    $logFilePath = [System.IO.Path]::Combine($env:TEMP, 'install-scripts.log')
+    $logFilePath = [System.IO.Path]::Combine($env:TEMP, 'Clone-EnhancedRepos.log')
     $formattedMessage | Out-File -FilePath $logFilePath -Append -Encoding utf8
 }
 
