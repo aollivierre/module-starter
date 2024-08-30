@@ -245,7 +245,7 @@ function Authenticate-GitHubCLI {
 
     begin {
         Write-Log -Message "Starting Authenticate-GitHubCLI function" -Level "NOTICE"
-        Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
+        # Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
     }
 
     process {
