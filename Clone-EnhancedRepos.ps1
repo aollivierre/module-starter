@@ -39,19 +39,28 @@ function Write-Log {
         [string]$Message,
         [string]$Level = "INFO"
     )
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logMessage = "[$timestamp] [$Level] $Message"
-    
-    switch ($Level) {
-        "INFO" { Write-Host $logMessage -ForegroundColor Green }
-        "ERROR" { Write-Host $logMessage -ForegroundColor Red }
-        "WARNING" { Write-Host $logMessage -ForegroundColor Yellow }
-        default { Write-Host $logMessage -ForegroundColor White }
+
+    # Get the PowerShell call stack to determine the actual calling function
+    $callStack = Get-PSCallStack
+    $callerFunction = if ($callStack.Count -ge 2) { $callStack[1].Command } else { '<Unknown>' }
+
+    # Prepare the formatted message with the actual calling function information
+    $formattedMessage = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [$Level] [$callerFunction] $Message"
+
+    # Display the log message based on the log level using Write-Host
+    switch ($Level.ToUpper()) {
+        "DEBUG" { Write-Host $formattedMessage -ForegroundColor DarkGray }
+        "INFO" { Write-Host $formattedMessage -ForegroundColor Green }
+        "NOTICE" { Write-Host $formattedMessage -ForegroundColor Cyan }
+        "WARNING" { Write-Host $formattedMessage -ForegroundColor Yellow }
+        "ERROR" { Write-Host $formattedMessage -ForegroundColor Red }
+        "CRITICAL" { Write-Host $formattedMessage -ForegroundColor Magenta }
+        default { Write-Host $formattedMessage -ForegroundColor White }
     }
 
     # Append to log file
     $logFilePath = [System.IO.Path]::Combine($env:TEMP, 'install-scripts.log')
-    $logMessage | Out-File -FilePath $logFilePath -Append -Encoding utf8
+    $formattedMessage | Out-File -FilePath $logFilePath -Append -Encoding utf8
 }
 
 # Function to validate URL
@@ -208,6 +217,116 @@ function Get-GitPath {
     }
 }
 
+
+function Authenticate-GitHubCLI {
+    <#
+    .SYNOPSIS
+    Authenticates with GitHub CLI using a token provided by the user or from a secrets file.
+
+    .DESCRIPTION
+    This function allows the user to authenticate with GitHub CLI by either entering a GitHub token manually or using a token from a secrets file located in the `$PSScriptRoot`.
+
+    .PARAMETER GhPath
+    The path to the GitHub CLI executable (gh.exe).
+
+    .EXAMPLE
+    Authenticate-GitHubCLI -GhPath "C:\Program Files\GitHub CLI\gh.exe"
+    Prompts the user to choose between entering the GitHub token manually or using the token from the secrets file.
+
+    .NOTES
+    This function requires GitHub CLI (gh) to be installed and available at the specified path.
+    #>
+
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$GhPath
+    )
+
+    begin {
+        Write-Log -Message "Starting Authenticate-GitHubCLI function" -Level "NOTICE"
+        Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
+    }
+
+    process {
+        try {
+            Write-Log -Message "Authenticating with GitHub CLI..." -Level "INFO"
+
+            # Prompt user to choose the authentication method
+            $choice = Read-Host "Select authentication method: 1) Enter GitHub token manually 2) Use secrets file in `$PSScriptRoot"
+
+            if ($choice -eq '1') {
+                # Option 1: Enter GitHub token manually
+                $token = Read-Host "Enter your GitHub token" -AsSecureString | ConvertFrom-SecureString -AsPlainText
+                Write-Log -Message "Using manually entered GitHub token for authentication." -Level "INFO"
+            }
+            elseif ($choice -eq '2') {
+                # Option 2: Use secrets file in $PSScriptRoot
+                $secretsFilePath = Join-Path -Path $PSScriptRoot -ChildPath "secrets.psd1"
+
+                if (-not (Test-Path -Path $secretsFilePath)) {
+                    $errorMessage = "Secrets file not found at path: $secretsFilePath"
+                    Write-Log -Message $errorMessage -Level "ERROR"
+                    throw $errorMessage
+                }
+
+                $secrets = Import-PowerShellDataFile -Path $secretsFilePath
+                $token = $secrets.GitHubToken
+
+                if (-not $token) {
+                    $errorMessage = "GitHub token not found in the secrets file."
+                    Write-Log -Message $errorMessage -Level "ERROR"
+                    throw $errorMessage
+                }
+
+                Write-Log -Message "Using GitHub token from secrets file for authentication." -Level "INFO"
+            }
+            else {
+                $errorMessage = "Invalid selection. Please choose 1 or 2."
+                Write-Log -Message $errorMessage -Level "ERROR"
+                throw $errorMessage
+            }
+
+            # Check if GitHub CLI is already authenticated
+            $authArguments = @("auth", "status", "-h", "github.com")
+            $authStatus = & $GhPath $authArguments 2>&1
+
+            if ($authStatus -notlike "*Logged in to github.com*") {
+                Write-Log -Message "GitHub CLI is not authenticated. Attempting authentication using selected method..." -Level "WARNING"
+
+                # Authenticate using the selected method
+                $loginArguments = @("auth", "login", "--with-token")
+                echo $token | & $GhPath $loginArguments
+
+                # Re-check the authentication status
+                $authStatus = & $GhPath $authArguments 2>&1
+                if ($authStatus -like "*Logged in to github.com*") {
+                    Write-Log -Message "GitHub CLI successfully authenticated." -Level "INFO"
+                }
+                else {
+                    $errorMessage = "Failed to authenticate GitHub CLI. Please check the token and try again."
+                    Write-Log -Message $errorMessage -Level "ERROR"
+                    throw $errorMessage
+                }
+            }
+            else {
+                Write-Log -Message "GitHub CLI is already authenticated." -Level "INFO"
+            }
+        }
+        catch {
+            Write-Log -Message "An error occurred during GitHub CLI authentication: $($_.Exception.Message)" -Level "ERROR"
+            throw $_
+        }
+    }
+
+    end {
+        Write-Log -Message "Authenticate-GitHubCLI function execution completed." -Level "NOTICE"
+    }
+}
+
+
+
+
 function Clone-EnhancedRepos {
     <#
     .SYNOPSIS
@@ -267,6 +386,13 @@ function Clone-EnhancedRepos {
             
             # Define arguments for GitHub CLI as an array
             $ghArguments = @("repo", "list", "aollivierre", "--json", "name,url")
+
+            # Set the path to GitHub CLI executable
+            $ghPath = "C:\Program Files\GitHub CLI\gh.exe"
+
+            # Authenticate with GitHub CLI
+            Authenticate-GitHubCLI -GhPath $ghPath
+
         
             # Execute the GitHub CLI command using the argument array
             Write-Log -Message "Retrieving repositories for user $githubUsername using GitHub CLI..." -Level "INFO"
