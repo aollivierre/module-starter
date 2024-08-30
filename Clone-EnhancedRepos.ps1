@@ -245,7 +245,7 @@ function Authenticate-GitHubCLI {
 
     begin {
         Write-Log -Message "Starting Authenticate-GitHubCLI function" -Level "NOTICE"
-        # Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
+        Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
     }
 
     process {
@@ -257,7 +257,10 @@ function Authenticate-GitHubCLI {
 
             if ($choice -eq '1') {
                 # Option 1: Enter GitHub token manually
-                $token = Read-Host "Enter your GitHub token" -AsSecureString | ConvertFrom-SecureString -AsPlainText
+                $secureToken = Read-Host "Enter your GitHub token" -AsSecureString
+                $ptr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken)
+                $token = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
+                [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
                 Write-Log -Message "Using manually entered GitHub token for authentication." -Level "INFO"
             }
             elseif ($choice -eq '2') {
@@ -323,6 +326,7 @@ function Authenticate-GitHubCLI {
         Write-Log -Message "Authenticate-GitHubCLI function execution completed." -Level "NOTICE"
     }
 }
+
 
 
 
