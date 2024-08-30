@@ -10,7 +10,8 @@
         "IntuneWin32App",
         "Microsoft.Graph.Groups",
         "SvRooij.ContentPrep.Cmdlet",
-        "Microsoft.Graph.Identity.SignIns"
+        "Microsoft.Graph.Identity.SignIns",
+        "PSFramework"
     )
     importedModules = @(
         "Microsoft.Graph.Authentication",
@@ -23,6 +24,7 @@
         "IntuneWin32App",
         "Microsoft.Graph.Groups",
         "SvRooij.ContentPrep.Cmdlet",
-        "Microsoft.Graph.Identity.SignIns"
+        "Microsoft.Graph.Identity.SignIns",
+        "PSFramework"
     )
 }
