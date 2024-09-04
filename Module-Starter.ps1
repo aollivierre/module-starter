@@ -1059,7 +1059,9 @@ function Manage-GitRepositories {
 
 
                 # Check for pending changes
-                $status = & "$GitPath" status
+                $arguments = "status"
+                Invoke-GitCommandWithRetry -GitPath $GitPath -Arguments $arguments
+
                 if ($status -match "fatal:") {
                     Write-Log -Message "Error during status check in repository $($repo.Name): $status" -Level "ERROR"
                     continue
