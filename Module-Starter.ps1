@@ -3,7 +3,7 @@ param (
     [bool]$SkipPSGalleryModules = $false,
     [bool]$SkipCheckandElevate = $false,
     [bool]$SkipPowerShell7Install = $false,
-    [bool]$SkipModuleDownload = $false,
+    [bool]$SkipEnhancedModules = $false,
     [bool]$SkipGitRepos = $false
 )
 
@@ -11,7 +11,7 @@ Write-Host "The Module Starter script is running in mode: $Mode"
 Write-Host "The Module Starter SkipPSGalleryModules is set to: $SkipPSGalleryModules"
 Write-Host "The Module Starter SkipCheckandElevate is set to: $SkipCheckandElevate"
 Write-Host "The Module Starter SkipPowerShell7Install is set to: $SkipPowerShell7Install"
-Write-Host "The Module Starter SkipModuleDownload is set to: $SkipModuleDownload"
+Write-Host "The Module Starter SkipEnhancedModules is set to: $SkipEnhancedModules"
 Write-Host "The Module Starter SkipGitRepos is set to: $SkipGitRepos"
 
 # Script to report the current PowerShell version
@@ -34,6 +34,39 @@ $scriptDetails = @(
 )
 
 
+function Get-ParentScriptName {
+    [CmdletBinding()]
+    param ()
+
+    try {
+        # Get the current call stack
+        $callStack = Get-PSCallStack
+
+        # If there is a call stack, return the top-most script name
+        if ($callStack.Count -gt 0) {
+            foreach ($frame in $callStack) {
+                if ($frame.ScriptName) {
+                    $parentScriptName = $frame.ScriptName
+                    # Write-EnhancedLog -Message "Found script in call stack: $parentScriptName" -Level "INFO"
+                }
+            }
+
+            if (-not [string]::IsNullOrEmpty($parentScriptName)) {
+                $parentScriptName = [System.IO.Path]::GetFileNameWithoutExtension($parentScriptName)
+                return $parentScriptName
+            }
+        }
+
+        # If no script name was found, return 'UnknownScript'
+        # Write-EnhancedLog -Message "No script name found in the call stack." -Level "WARNING"
+        return "UnknownScript"
+    }
+    catch {
+        # Write-EnhancedLog -Message "An error occurred while retrieving the parent script name: $_" -Level "ERROR"
+        return "UnknownScript"
+    }
+}
+
 # Function for logging with color coding
 function Write-Log {
     param (
@@ -45,8 +78,11 @@ function Write-Log {
     $callStack = Get-PSCallStack
     $callerFunction = if ($callStack.Count -ge 2) { $callStack[1].Command } else { '<Unknown>' }
 
+    # Get the parent script name
+    $parentScriptName = Get-ParentScriptName
+
     # Prepare the formatted message with the actual calling function information
-    $formattedMessage = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [$Level] [$callerFunction] $Message"
+    $formattedMessage = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [$Level] [$parentScriptName.$callerFunction] $Message"
 
     # Display the log message based on the log level using Write-Host
     switch ($Level.ToUpper()) {
@@ -60,9 +96,10 @@ function Write-Log {
     }
 
     # Append to log file
-    $logFilePath = [System.IO.Path]::Combine($env:TEMP, 'install-scripts.log')
+    $logFilePath = [System.IO.Path]::Combine($env:TEMP, 'Module-Starter.log')
     $formattedMessage | Out-File -FilePath $logFilePath -Append -Encoding utf8
 }
+
 
 
 
@@ -1072,7 +1109,7 @@ function Initialize-Environment {
             Write-Log "Modules not found or directory is empty at $global:modulesBasePath. Initiating download..." -Level "INFO"
             # Download-Modules -scriptDetails $scriptDetails
 
-            if (-not $SkipModuleDownload) {
+            if (-not $SkipEnhancedModules) {
                 Download-Modules -scriptDetails $scriptDetails
                 Write-Log -Message "Modules downloaded successfully." -Level "INFO"
             }

@@ -20,7 +20,8 @@ $replacements = @{
     '\$SkipCheckandElevate = \$false'    = '$SkipCheckandElevate = $true'
     '\$SkipAdminCheck = \$false'         = '$SkipAdminCheck = $true'
     '\$SkipPowerShell7Install = \$false' = '$SkipPowerShell7Install = $true'
-    '\$SkipModuleDownload = \$false'     = '$SkipModuleDownload = $false'
+    '\$SkipModuleDownload = \$false'     = '$SkipModuleDownload = $true'
+    '\$SkipGitrepos = \$false'           = '$SkipGitrepos = $true'
 }
 
 # Apply the replacements
@@ -30,5 +31,3 @@ foreach ($pattern in $replacements.Keys) {
 
 # Execute the script
 Invoke-Expression $scriptContent
-
-

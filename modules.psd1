@@ -11,7 +11,9 @@
         "Microsoft.Graph.Groups",
         "SvRooij.ContentPrep.Cmdlet",
         "Microsoft.Graph.Identity.SignIns",
-        "PSFramework"
+        "PSFramework",
+        "Pester",
+        "PSReadLine"
     )
     importedModules = @(
         "Microsoft.Graph.Authentication",
@@ -25,6 +27,9 @@
         "Microsoft.Graph.Groups",
         "SvRooij.ContentPrep.Cmdlet",
         "Microsoft.Graph.Identity.SignIns",
-        "PSFramework"
+        "PSFramework",
+        "Pester",
+        "PSReadLine"
+
     )
 }
