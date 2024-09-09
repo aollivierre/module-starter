@@ -60,3 +60,30 @@ foreach ($pattern in $replacements.Keys) {
 
 # Execute the script
 Invoke-Expression $scriptContent
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Define a hashtable for splatting
+$moduleStarterParams = @{
+    Mode                   = "dev"
+    SkipPSGalleryModules   = $true
+    SkipCheckandElevate    = $true
+    SkipPowerShell7Install = $true
+    SkipEnhancedModules    = $true
+    SkipGitRepos           = $true
+}
+
+# Call the function using the splat
+Invoke-ModuleStarter @moduleStarterParams
