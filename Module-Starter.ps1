@@ -1110,7 +1110,7 @@ function Manage-GitRepositories {
 function Initialize-Environment {
     param (
         [string]$Mode, # Accepts either 'dev' or 'prod'
-        [string]$WindowsModulePath, # Path to the Windows module
+        # [string]$WindowsModulePath, # Path to the Windows module
         [string]$ModulesBasePath # Custom modules base path
     )
 
@@ -1255,7 +1255,7 @@ function Initialize-Environment {
 # Example usage of Initialize-Environment
 $initializeParams = @{
     Mode              = $Mode
-    WindowsModulePath = "EnhancedBoilerPlateAO\EnhancedBoilerPlateAO.psm1"
+    # WindowsModulePath = "EnhancedBoilerPlateAO\EnhancedBoilerPlateAO.psm1"
     ModulesBasePath   = "C:\code\modulesv2" # Custom modules base path
 }
 
