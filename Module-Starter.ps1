@@ -100,9 +100,6 @@ function Write-EnhancedModuleStarterLog {
     $formattedMessage | Out-File -FilePath $logFilePath -Append -Encoding utf8
 }
 
-
-
-
 # Function to get the platform
 # function Get-Platform {
 #     if ($PSVersionTable.PSVersion.Major -ge 7) {
@@ -587,7 +584,6 @@ function Sanitize-VersionString {
     }
 }
 
-
 function Install-PowerShell7FromWeb {
     param (
         [string]$url = "https://raw.githubusercontent.com/aollivierre/setuplab/main/Install-PowerShell7.ps1"
@@ -626,8 +622,6 @@ function Install-PowerShell7FromWeb {
 }
 
 
-
-
 function Download-Modules {
     param (
         [array]$scriptDetails  # Array of script details, including URLs
@@ -647,9 +641,6 @@ function Download-Modules {
         $process.WaitForExit()
     }
 }
-
-
-
 
 function Install-EnhancedModule {
     param (
@@ -701,7 +692,6 @@ function Install-EnhancedModule {
         Write-EnhancedModuleStarterLog "Failed to install module $ModuleName. Error: $_" -Level "ERROR"
     }
 }
-
 
 
 function Import-EnhancedModules {
@@ -824,8 +814,6 @@ function Download-Psd1File {
     }
 }
 
-
-
 function Ensure-NuGetProvider {
     # Ensure NuGet provider and PowerShellGet module are installed if running in PowerShell 5
     if ($PSVersionTable.PSVersion.Major -eq 5) {
@@ -865,7 +853,6 @@ function Ensure-GitIsInstalled {
         return $installSuccess
     }
 }
-
 
 function Install-GitFromWeb {
     param (
@@ -955,8 +942,6 @@ function Get-GitPath {
         return $null
     }
 }
-
-
 function Invoke-GitCommandWithRetry {
     param (
         [string]$GitPath,
@@ -997,10 +982,6 @@ function Invoke-GitCommandWithRetry {
         }
     }
 }
-
-
-
-
 function Manage-GitRepositories {
     param (
         [Parameter(Mandatory = $true)]
@@ -1125,125 +1106,6 @@ function Manage-GitRepositories {
         Write-EnhancedModuleStarterLog -Message "Manage-GitRepositories function execution completed." -Level "INFO"
     }
 }
-
-
-
-
-
-
-# function Manage-GitRepositories {
-#     param (
-#         [Parameter(Mandatory = $true)]
-#         [string]$ModulesBasePath
-#     )
-
-#     begin {
-#         Write-EnhancedModuleStarterLog -Message "Starting Manage-GitRepositories function" -Level "INFO"
-
-#         # Initialize lists for tracking repository statuses
-#         $reposWithPushChanges = [System.Collections.Generic.List[string]]::new()
-#         $reposSummary = [System.Collections.Generic.List[PSCustomObject]]::new()
-
-#         # Validate ModulesBasePath
-#         if (-not (Test-Path -Path $ModulesBasePath)) {
-#             Write-EnhancedModuleStarterLog -Message "Modules base path not found: $ModulesBasePath" -Level "ERROR"
-#             throw "Modules base path not found."
-#         }
-
-#         Write-EnhancedModuleStarterLog -Message "Found modules base path: $ModulesBasePath" -Level "INFO"
-
-#         # Get the Git path
-#         $GitPath = Get-GitPath
-#         if (-not $GitPath) {
-#             throw "Git executable not found."
-#         }
-#     }
-
-#     process {
-#         try {
-#             $repos = Get-ChildItem -Path $ModulesBasePath -Directory
-
-#             foreach ($repo in $repos) {
-#                 Set-Location -Path $repo.FullName
-
-#                 # Add the repository to Git's safe directories
-#                 & "$GitPath" config --global --add safe.directory "$($repo.FullName)"
-
-#                 # Fetch the latest changes
-#                 $fetchOutput = & "$GitPath" fetch
-#                 if ($fetchOutput -match "fatal:") {
-#                     Write-EnhancedModuleStarterLog -Message "Error during fetch in repository $($repo.Name): $fetchOutput" -Level "ERROR"
-#                     continue
-#                 }
-
-#                 # Check for pending changes
-#                 $status = & "$GitPath" status
-#                 if ($status -match "fatal:") {
-#                     Write-EnhancedModuleStarterLog -Message "Error during status check in repository $($repo.Name): $status" -Level "ERROR"
-#                     continue
-#                 }
-
-#                 $repoStatus = "Up to Date"
-#                 if ($status -match "Your branch is behind") {
-#                     Write-EnhancedModuleStarterLog -Message "Repository $($repo.Name) is behind the remote. Pulling changes..." -Level "INFO"
-#                     $pullOutput = & "$GitPath" pull
-#                     if ($pullOutput -match "fatal:") {
-#                         Write-EnhancedModuleStarterLog -Message "Error during pull in repository $($repo.Name): $pullOutput" -Level "ERROR"
-#                         continue
-#                     }
-#                     $repoStatus = "Pulled"
-#                 }
-
-#                 if ($status -match "Your branch is ahead") {
-#                     Write-EnhancedModuleStarterLog -Message "Repository $($repo.Name) has unpushed changes." -Level "WARNING"
-#                     $reposWithPushChanges.Add($repo.FullName)
-#                     $repoStatus = "Pending Push"
-#                 }
-
-#                 # Add the repository status to the summary list
-#                 $reposSummary.Add([pscustomobject]@{
-#                         RepositoryName = $repo.Name
-#                         Status         = $repoStatus
-#                         LastChecked    = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-#                     })
-#             }
-
-#             # Summary of repositories with pending push changes
-#             if ($reposWithPushChanges.Count -gt 0) {
-#                 Write-EnhancedModuleStarterLog -Message "The following repositories have pending push changes:" -Level "WARNING"
-#                 $reposWithPushChanges | ForEach-Object { Write-EnhancedModuleStarterLog -Message $_ -Level "WARNING" }
-
-#                 Write-EnhancedModuleStarterLog -Message "Please manually commit and push the changes in these repositories." -Level "WARNING"
-#             }
-#             else {
-#                 Write-EnhancedModuleStarterLog -Message "All repositories are up to date." -Level "INFO"
-#             }
-#         }
-#         catch {
-#             Write-EnhancedModuleStarterLog -Message "An error occurred while managing Git repositories: $_" -Level "ERROR"
-#             throw $_
-#         }
-#     }
-
-#     end {
-#         # Summary output in the console with color coding
-#         $totalRepos = $reposSummary.Count
-#         $pulledRepos = $reposSummary | Where-Object { $_.Status -eq "Pulled" }
-#         $pendingPushRepos = $reposSummary | Where-Object { $_.Status -eq "Pending Push" }
-#         $upToDateRepos = $reposSummary | Where-Object { $_.Status -eq "Up to Date" }
-
-#         Write-Host "---------- Summary Report ----------" -ForegroundColor Cyan
-#         Write-Host "Total Repositories: $totalRepos" -ForegroundColor Cyan
-#         Write-Host "Repositories Pulled: $($pulledRepos.Count)" -ForegroundColor Green
-#         Write-Host "Repositories with Pending Push: $($pendingPushRepos.Count)" -ForegroundColor Yellow
-#         Write-Host "Repositories Up to Date: $($upToDateRepos.Count)" -ForegroundColor Green
-
-#         # Return to the original location
-#         Set-Location -Path $ModulesBasePath
-
-#         Write-EnhancedModuleStarterLog -Message "Manage-GitRepositories function execution completed." -Level "INFO"
-#     }
-# }
 
 function Initialize-Environment {
     param (
@@ -1412,29 +1274,9 @@ Initialize-Environment @initializeParams
 ############################################### END MODULE LOADING ############################################################
 ###############################################################################################################################
 
-# Execute InstallAndImportModulesPSGallery function
-# InstallAndImportModulesPSGallery -modulePsd1Path "$PSScriptRoot/modules.psd1"
-
-
-###############################################################################################################################
-############################################### END MODULE LOADING ############################################################
-###############################################################################################################################
-
 # Setup logging
 Write-EnhancedModuleStarterLog -Message "Script Started in $mode mode" -Level "INFO"
 
 ################################################################################################################################
 ################################################################################################################################
 ################################################################################################################################
-
-
-# # ################################################################################################################################
-# # ############### CALLING AS SYSTEM to simulate Intune deployment as SYSTEM (Uncomment for debugging) ############################
-# # ################################################################################################################################
-
-# # Example usage
-# $privateFolderPath = Join-Path -Path $PSScriptRoot -ChildPath "private"
-# $PsExec64Path = Join-Path -Path $privateFolderPath -ChildPath "PsExec64.exe"
-# $ScriptToRunAsSystem = $MyInvocation.MyCommand.Path
-
-# Ensure-RunningAsSystem -PsExec64Path $PsExec64Path -ScriptPath $ScriptToRunAsSystem -TargetFolder $privateFolderPath

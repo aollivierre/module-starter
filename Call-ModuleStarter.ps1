@@ -31,3 +31,32 @@ foreach ($pattern in $replacements.Keys) {
 
 # Execute the script
 Invoke-Expression $scriptContent
+
+
+
+
+
+
+
+
+# Fetch the script content
+$scriptContent = Invoke-RestMethod "https://raw.githubusercontent.com/aollivierre/module-starter/main/Module-Starter.ps1"
+
+# Define replacements in a hashtable
+$replacements = @{
+    '\$Mode = "dev"'                     = '$Mode = "prod"'
+    '\$SkipPSGalleryModules = \$false'   = '$SkipPSGalleryModules = $false'
+    '\$SkipCheckandElevate = \$false'    = '$SkipCheckandElevate = $false'
+    '\$SkipAdminCheck = \$false'         = '$SkipAdminCheck = $false'
+    '\$SkipPowerShell7Install = \$false' = '$SkipPowerShell7Install = $false'
+    '\$SkipModuleDownload = \$false'     = '$SkipModuleDownload = $false'
+    '\$SkipGitrepos = \$false'           = '$SkipGitrepos = $false'
+}
+
+# Apply the replacements
+foreach ($pattern in $replacements.Keys) {
+    $scriptContent = $scriptContent -replace $pattern, $replacements[$pattern]
+}
+
+# Execute the script
+Invoke-Expression $scriptContent

@@ -13,7 +13,8 @@
         "Microsoft.Graph.Identity.SignIns",
         "PSFramework",
         "Pester",
-        "PSReadLine"
+        "PSReadLine",
+        "MSIdentitytools"
     )
     importedModules = @(
         "Microsoft.Graph.Authentication",
@@ -29,7 +30,7 @@
         "Microsoft.Graph.Identity.SignIns",
         "PSFramework",
         "Pester",
-        "PSReadLine"
-
+        "PSReadLine",
+        "MSIdentitytools"
     )
 }
