@@ -127,7 +127,7 @@ function Install-EnhancedModuleStarterAO {
 
             # Define the arguments for the Start-Process
             $arguments = @(
-                '-NoExit'
+                # '-NoExit'
                 '-NoProfile'
                 '-ExecutionPolicy'
                 'Bypass'
