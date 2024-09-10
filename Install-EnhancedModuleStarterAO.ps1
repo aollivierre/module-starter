@@ -278,7 +278,7 @@ function Check-ModuleVersionStatus {
     foreach ($ModuleName in $ModuleNames) {
         try {
 
-            Write-EnhancedModuleStarterLog -Message 'Checking module '$ModuleName
+            Write-EnhancedModuleStarterLog -Message "Checking module $ModuleName"
             $installedModule = Get-Module -ListAvailable -Name $ModuleName | Sort-Object Version -Descending | Select-Object -First 1
             # $installedModule = Check-SystemWideModule -ModuleName 'Pester'
             $latestModule = Find-Module -Name $ModuleName -ErrorAction SilentlyContinue
