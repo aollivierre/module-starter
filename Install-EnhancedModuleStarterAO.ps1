@@ -2,51 +2,36 @@ function Is-RunningInPS5 {
     return ($PSVersionTable.PSVersion.Major -eq 5)
 }
 
-function Reset-ModulePaths {
+function Get-ParentScriptName {
     [CmdletBinding()]
     param ()
 
-    begin {
-        # Initialization block, typically used for setup tasks
-        Write-EnhancedModuleStarterLog "Initializing Reset-ModulePaths function..." -Level "DEBUG"
-    }
+    try {
+        # Get the current call stack
+        $callStack = Get-PSCallStack
 
-    process {
-        try {
-            # Log the start of the process
-            Write-EnhancedModuleStarterLog "Resetting module paths to default values..." -Level "INFO"
+        # If there is a call stack, return the top-most script name
+        if ($callStack.Count -gt 0) {
+            foreach ($frame in $callStack) {
+                if ($frame.ScriptName) {
+                    $parentScriptName = $frame.ScriptName
+                    # Write-EnhancedLog -Message "Found script in call stack: $parentScriptName" -Level "INFO"
+                }
+            }
 
-            # Get the current user's Documents path
-            $userModulesPath = [System.IO.Path]::Combine($env:USERPROFILE, 'Documents\WindowsPowerShell\Modules')
-
-            # Define the default module paths
-            $defaultModulePaths = @(
-                "C:\Program Files\WindowsPowerShell\Modules",
-                $userModulesPath,
-                "C:\Windows\System32\WindowsPowerShell\v1.0\Modules"
-            )
-
-            # Attempt to reset the PSModulePath environment variable
-            $env:PSModulePath = [string]::Join(';', $defaultModulePaths)
-            Write-EnhancedModuleStarterLog "PSModulePath successfully set to: $($env:PSModulePath -split ';' | Out-String)" -Level "INFO"
-
-            # Optionally persist the change for the current user
-            [Environment]::SetEnvironmentVariable("PSModulePath", $env:PSModulePath, [EnvironmentVariableTarget]::User)
-            Write-EnhancedModuleStarterLog "PSModulePath environment variable set for the current user." -Level "INFO"
+            if (-not [string]::IsNullOrEmpty($parentScriptName)) {
+                $parentScriptName = [System.IO.Path]::GetFileNameWithoutExtension($parentScriptName)
+                return $parentScriptName
+            }
         }
-        catch {
-            # Capture and log any errors that occur during the process
-            $errorMessage = $_.Exception.Message
-            Write-EnhancedModuleStarterLog "Error resetting module paths: $errorMessage" -Level "ERROR"
 
-            # Optionally, you could throw the error to halt the script
-            throw $_
-        }
+        # If no script name was found, return 'UnknownScript'
+        # Write-EnhancedLog -Message "No script name found in the call stack." -Level "WARNING"
+        return "UnknownScript"
     }
-
-    end {
-        # Finalization block, typically used for cleanup tasks
-        Write-EnhancedModuleStarterLog "Reset-ModulePaths function completed." -Level "DEBUG"
+    catch {
+        # Write-EnhancedLog -Message "An error occurred while retrieving the parent script name: $_" -Level "ERROR"
+        return "UnknownScript"
     }
 }
 
@@ -81,6 +66,56 @@ function Write-EnhancedModuleStarterLog {
     $logFilePath = [System.IO.Path]::Combine($env:TEMP, 'Module-Starter.log')
     $formattedMessage | Out-File -FilePath $logFilePath -Append -Encoding utf8
 }
+
+function Reset-ModulePaths {
+    [CmdletBinding()]
+    param ()
+
+    begin {
+        # Initialization block, typically used for setup tasks
+        Write-EnhancedModuleStarterLog -Message "Initializing Reset-ModulePaths function..." -Level "DEBUG"
+    }
+
+    process {
+        try {
+            # Log the start of the process
+            Write-EnhancedModuleStarterLog -Message "Resetting module paths to default values..." -Level "INFO"
+
+            # Get the current user's Documents path
+            $userModulesPath = [System.IO.Path]::Combine($env:USERPROFILE, 'Documents\WindowsPowerShell\Modules')
+
+            # Define the default module paths
+            $defaultModulePaths = @(
+                "C:\Program Files\WindowsPowerShell\Modules",
+                $userModulesPath,
+                "C:\Windows\System32\WindowsPowerShell\v1.0\Modules"
+            )
+
+            # Attempt to reset the PSModulePath environment variable
+            $env:PSModulePath = [string]::Join(';', $defaultModulePaths)
+            Write-EnhancedModuleStarterLog "PSModulePath successfully set to: $($env:PSModulePath -split ';' | Out-String)" -Level "INFO"
+
+            # Optionally persist the change for the current user
+            [Environment]::SetEnvironmentVariable("PSModulePath", $env:PSModulePath, [EnvironmentVariableTarget]::User)
+            Write-EnhancedModuleStarterLog -Message "PSModulePath environment variable set for the current user." -Level "INFO"
+        }
+        catch {
+            # Capture and log any errors that occur during the process
+            $errorMessage = $_.Exception.Message
+            Write-EnhancedModuleStarterLog -Message "Error resetting module paths: $errorMessage" -Level "ERROR"
+
+            # Optionally, you could throw the error to halt the script
+            throw $_
+        }
+    }
+
+    end {
+        # Finalization block, typically used for cleanup tasks
+        Write-EnhancedModuleStarterLog -Message "Reset-ModulePaths function completed." -Level "DEBUG"
+    }
+}
+
+
 
 function Install-EnhancedModuleStarterAO {
     <#

@@ -71,7 +71,7 @@ Invoke-Expression $scriptContent
 
 
 
-
+Invoke-Expression (Invoke-RestMethod "https://raw.githubusercontent.com/aollivierre/module-starter/main/Install-EnhancedModuleStarterAO.ps1")
 
 
 
