@@ -14,7 +14,8 @@
         "PSFramework",
         "Pester",
         "PSReadLine",
-        "MSIdentitytools"
+        "MSIdentitytools",
+        "PSWindowsUpdate"
     )
     importedModules = @(
         "Microsoft.Graph.Authentication",
@@ -31,6 +32,7 @@
         "PSFramework",
         "Pester",
         "PSReadLine",
-        "MSIdentitytools"
+        "MSIdentitytools",
+        "PSWindowsUpdate"
     )
 }
