@@ -1184,7 +1184,7 @@ function Initialize-Environment {
         # Write-EnhancedModuleStarterLog "Module Path: $global:modulePath" -Level "INFO"
 
         # Write-Host "Starting to call Import-LatestModulesLocalRepository..."
-        # Import-ModulesFromLocalRepository -ModulesFolderPath $global:modulesBasePath
+        Import-ModulesFromLocalRepository -ModulesFolderPath $global:modulesBasePath
     }
     elseif ($Mode -eq "prod") {
         # Log the start of the process
