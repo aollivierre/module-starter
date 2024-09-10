@@ -234,6 +234,36 @@ function Invoke-InPowerShell5 {
     }
 }
 
+function Install-ModuleWithPowerShell5Fallback {
+    param (
+        [string]$ModuleName
+    )
+
+    # Log the start of the module installation process
+    Write-EnhancedModuleStarterLog -Message "Starting the module installation process for: $ModuleName" -Level "NOTICE"
+
+
+    $DBG
+
+    # Check if the current PowerShell version is not 5
+    if ($PSVersionTable.PSVersion.Major -ne 5) {
+        Write-EnhancedModuleStarterLog -Message "Current PowerShell version is $($PSVersionTable.PSVersion). PowerShell 5 is required." -Level "WARNING"
+    }
+
+    # If already in PowerShell 5, install the module
+    Write-EnhancedModuleStarterLog -Message "Current PowerShell version is 5. Proceeding with module installation." -Level "INFO"
+    Write-EnhancedModuleStarterLog -Message "Installing module: $ModuleName in PowerShell 5" -Level "NOTICE"
+
+    try {
+        Install-Module -Name $ModuleName -Force -SkipPublisherCheck -Scope AllUsers
+        Write-EnhancedModuleStarterLog -Message "Module $ModuleName installed successfully in PowerShell 5." -Level "INFO"
+    }
+    catch {
+        Write-EnhancedModuleStarterLog -Message "Failed to install module $ModuleName. Error: $_" -Level "ERROR"
+    }
+}
+
+
 
 function Update-ModuleIfOldOrMissing {
     <#
