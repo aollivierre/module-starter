@@ -2,6 +2,94 @@ function Is-RunningInPS5 {
     return ($PSVersionTable.PSVersion.Major -eq 5)
 }
 
+function CheckAndElevate {
+    <#
+    .SYNOPSIS
+    Checks if the script is running with administrative privileges and optionally elevates it if not.
+
+    .DESCRIPTION
+    The CheckAndElevate function checks whether the current PowerShell session is running with administrative privileges. 
+    It can either return the administrative status or attempt to elevate the script if it is not running as an administrator.
+
+    .PARAMETER ElevateIfNotAdmin
+    If set to $true, the function will attempt to elevate the script if it is not running with administrative privileges. 
+    If set to $false, the function will simply return the administrative status without taking any action.
+
+    .EXAMPLE
+    CheckAndElevate -ElevateIfNotAdmin $true
+
+    Checks the current session for administrative privileges and elevates if necessary.
+
+    .EXAMPLE
+    $isAdmin = CheckAndElevate -ElevateIfNotAdmin $false
+    if (-not $isAdmin) {
+        Write-Host "The script is not running with administrative privileges."
+    }
+
+    Checks the current session for administrative privileges and returns the status without elevating.
+    
+    .NOTES
+    If the script is elevated, it will restart with administrative privileges. Ensure that any state or data required after elevation is managed appropriately.
+    #>
+
+    [CmdletBinding()]
+    param (
+        [bool]$ElevateIfNotAdmin = $true
+    )
+
+    Begin {
+        Write-EnhancedLog -Message "Starting CheckAndElevate function" -Level "NOTICE"
+
+        # Use .NET classes for efficiency
+        try {
+            $isAdmin = [System.Security.Principal.WindowsPrincipal]::new([System.Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+            Write-EnhancedLog -Message "Checking for administrative privileges..." -Level "INFO"
+        }
+        catch {
+            Write-EnhancedLog -Message "Error determining administrative status: $($_.Exception.Message)" -Level "ERROR"
+            Handle-Error -ErrorRecord $_
+            throw $_
+        }
+    }
+
+    Process {
+        if (-not $isAdmin) {
+            if ($ElevateIfNotAdmin) {
+                try {
+                    Write-EnhancedLog -Message "The script is not running with administrative privileges. Attempting to elevate..." -Level "WARNING"
+
+                    $powerShellPath = Get-PowerShellPath
+                    $startProcessParams = @{
+                        FilePath     = $powerShellPath
+                        ArgumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"")
+                        Verb         = "RunAs"
+                    }
+                    Start-Process @startProcessParams
+
+                    Write-EnhancedLog -Message "Script re-launched with administrative privileges. Exiting current session." -Level "INFO"
+                    exit
+                }
+                catch {
+                    Write-EnhancedLog -Message "Failed to elevate privileges: $($_.Exception.Message)" -Level "ERROR"
+                    Handle-Error -ErrorRecord $_
+                    throw $_
+                }
+            }
+            else {
+                Write-EnhancedLog -Message "The script is not running with administrative privileges and will continue without elevation." -Level "INFO"
+            }
+        }
+        else {
+            Write-EnhancedLog -Message "Script is already running with administrative privileges." -Level "INFO"
+        }
+    }
+
+    End {
+        Write-EnhancedLog -Message "Exiting CheckAndElevate function" -Level "NOTICE"
+        return $isAdmin
+    }
+}
+
 function Get-ParentScriptName {
     [CmdletBinding()]
     param ()
@@ -124,13 +212,15 @@ function Handle-Error {
     try {
         if ($PSVersionTable.PSVersion.Major -ge 7) {
             $fullErrorDetails = Get-Error -InputObject $ErrorRecord | Out-String
-        } else {
+        }
+        else {
             $fullErrorDetails = $ErrorRecord.Exception | Format-List * -Force | Out-String
         }
 
         Write-EnhancedModuleStarterLog -Message "Exception Message: $($ErrorRecord.Exception.Message)" -Level "ERROR"
         Write-EnhancedModuleStarterLog -Message "Full Exception: $fullErrorDetails" -Level "ERROR"
-    } catch {
+    }
+    catch {
         # Fallback error handling in case of an unexpected error in the try block
         Write-EnhancedModuleStarterLog -Message "An error occurred while handling another error. Original Exception: $($ErrorRecord.Exception.Message)" -Level "CRITICAL"
         Write-EnhancedModuleStarterLog -Message "Handler Exception: $($_.Exception.Message)" -Level "CRITICAL"
@@ -188,7 +278,8 @@ function Remove-OldVersions {
                 Remove-Item -Path $modulePath -Recurse -Force -Confirm:$false
 
                 Write-EnhancedModuleStarterLog -Message "Removed $($version.Version) successfully." -Level "INFO"
-            } catch {
+            }
+            catch {
                 Write-EnhancedModuleStarterLog -Message "Failed to remove version $($version.Version) of $ModuleName at $modulePath. Error: $_" -Level "ERROR"
                 Handle-Error -ErrorRecord $_
             }
@@ -200,36 +291,189 @@ function Remove-OldVersions {
     }
 }
 
-function Invoke-InPowerShell5 {
+# function Invoke-InPowerShell5 {
+#     <#
+#     .SYNOPSIS
+#     Relaunches the script in PowerShell 5 (x64) if the current session is not already running in PowerShell 5.
+
+#     .PARAMETER ScriptPath
+#     The full path to the script that needs to be executed in PowerShell 5 (x64).
+
+#     .DESCRIPTION
+#     This function checks if the current PowerShell session is running in PowerShell 5. If not, it relaunches the specified script in PowerShell 5 (x64) with elevated privileges.
+
+#     .EXAMPLE
+#     Invoke-InPowerShell5 -ScriptPath "C:\Scripts\MyScript.ps1"
+#     #>
+
+#     [CmdletBinding()]
+#     param (
+#         [Parameter(Mandatory = $false, HelpMessage = "Provide the full path to the script to be run in PowerShell 5.")]
+#         [ValidateNotNullOrEmpty()]
+#         [string]$ScriptPath
+#     )
+
+#     Begin {
+#         # Log parameters
+#         Write-EnhancedLog -Message "Starting Invoke-InPowerShell5 function." -Level "Notice"
+#         Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
+
+#         CheckAndElevate
+
+#         # Log the start of the process
+#         Write-EnhancedLog -Message "Checking PowerShell version." -Level "INFO"
+#     }
+
+#     Process {
+#         try {
+#             # Check if we're not in PowerShell 5
+#             if ($PSVersionTable.PSVersion.Major -ne 5) {
+#                 Write-EnhancedLog -Message "Relaunching script in PowerShell 5 (x64)..." -Level "WARNING"
+
+#                 # Get the path to PowerShell 5 (x64)
+#                 $ps5x64Path = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+
+#                 # Define arguments for the Start-Process command
+#                 $arguments = @(
+#                     "-NoExit"
+#                     "-NoProfile"
+#                     "-ExecutionPolicy", "Bypass"
+#                     "-File", "`"$PSCommandPath`""
+#                     # "-File", "`"$ScriptPath`""
+#                 )
+
+#                 # Launch in PowerShell 5 (x64) with elevated privileges
+#                 $startProcessParams64 = @{
+#                     FilePath     = $ps5x64Path
+#                     ArgumentList = $arguments
+#                     # ArgumentList = @("-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"")
+#                     Verb         = "RunAs"
+#                     PassThru     = $true
+#                 }
+
+#                 Write-EnhancedLog -Message "Starting PowerShell 5 (x64) to perform the update..." -Level "NOTICE"
+#                 $process64 = Start-Process @startProcessParams64
+#                 $process64.WaitForExit()
+
+#                 Write-EnhancedLog -Message "PowerShell 5 (x64) process completed." -Level "NOTICE"
+#                 Exit
+#             } else {
+#                 Write-EnhancedLog -Message "Already running in PowerShell 5. No need to relaunch." -Level "INFO"
+#             }
+#         }
+#         catch {
+#             Write-EnhancedLog -Message "Error occurred while relaunching script in PowerShell 5: $($_.Exception.Message)" -Level "ERROR"
+#             Handle-Error -ErrorRecord $_
+#             throw
+#         }
+#     }
+
+#     End {
+#         Write-EnhancedLog -Message "Exiting Invoke-InPowerShell5 function." -Level "Notice"
+#     }
+# }
+
+
+function Install-ModuleInPS5 {
+    <#
+    .SYNOPSIS
+    Installs a PowerShell module in PowerShell 5 and validates the installation.
+
+    .DESCRIPTION
+    The Install-ModuleInPS5 function installs a specified PowerShell module using PowerShell 5. It ensures that the module is installed in the correct environment and logs the entire process. It handles errors gracefully and validates the installation after completion.
+
+    .PARAMETER ModuleName
+    The name of the PowerShell module to install in PowerShell 5.
+
+    .EXAMPLE
+    $params = @{
+        ModuleName = "Az"
+    }
+    Install-ModuleInPS5 @params
+    Installs the specified PowerShell module using PowerShell 5 and logs the process.
+    #>
+
+    [CmdletBinding()]
     param (
-        [string]$ScriptPath
+        [Parameter(Mandatory = $true, HelpMessage = "Provide the name of the module to install.")]
+        [ValidateNotNullOrEmpty()]
+        [string]$ModuleName
     )
 
-    if ($PSVersionTable.PSVersion.Major -ne 5) {
-        Write-EnhancedModuleStarterLog -Message "Relaunching script in PowerShell 5 (x64)..." -Level "WARNING"
+    Begin {
+        Write-EnhancedLog -Message "Starting Install-ModuleInPS5 function" -Level "Notice"
+        Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
 
-        # Get the path to PowerShell 5 (x64)
-        $ps5x64Path = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+        # Path to PowerShell 5
+        $ps5Path = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
 
-        # Launch in PowerShell 5 (x64)
-        $startProcessParams64 = @{
-            FilePath     = $ps5x64Path
-            ArgumentList = @(
-                "-NoExit",
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", "`"$ScriptPath`""
-            )
-            Verb         = "RunAs"
-            PassThru     = $true
+        # Validate if PowerShell 5 exists
+        if (-not (Test-Path $ps5Path)) {
+            throw "PowerShell 5 executable not found: $ps5Path"
         }
+    }
 
-        Write-EnhancedModuleStarterLog -Message "Starting PowerShell 5 (x64) to perform the update..." -Level "NOTICE"
-        $process64 = Start-Process @startProcessParams64
-        $process64.WaitForExit()
+    Process {
+        try {
+            Write-EnhancedLog -Message "Preparing to install module: $ModuleName in PowerShell 5" -Level "INFO"
 
-        Write-EnhancedModuleStarterLog -Message "PowerShell 5 (x64) process completed." -Level "NOTICE"
-        Exit
+            # Get current timestamp
+            # $timestamp = (Get-Date).ToString("yyyy-MM-dd_HH-mm-ss")
+
+            # Create dynamic log directory path
+            # $logDir = "C:\logs\PSModule_Install"
+            # $logFile = "$logDir\InstallLog_$timestamp.log"
+
+            # Check if the log directory exists, and create it if not
+            # if (-not (Test-Path $logDir)) {
+            # Write-EnhancedLog -Message "Log directory does not exist. Creating directory: $logDir" -Level "INFO"
+            # New-Item -Path $logDir -ItemType Directory -Force
+            # }
+
+            # PowerShell 5 command to install the module
+            $ps5Command = "Install-Module -Name $ModuleName -Scope Allusers -SkipPublisherCheck -Force -Confirm:`$false"
+
+            # Log the parameters being passed to Start-Process
+            Write-EnhancedLog -Message "Starting installation of module $ModuleName in PowerShell 5" -Level "INFO"
+
+            # Use Start-Process to launch PowerShell 5 and install the module
+            $process = Start-Process -FilePath $ps5Path -ArgumentList "-Command", $ps5Command `
+                -Wait -NoNewWindow -PassThru
+
+            # Check if the process succeeded
+            if ($process.ExitCode -eq 0) {
+                Write-EnhancedLog -Message "Module '$ModuleName' installed successfully in PS5" -Level "INFO"
+            }
+            else {
+                Write-EnhancedLog -Message "Error occurred during module installation. Exit Code: $($process.ExitCode)" -Level "ERROR"
+            }
+        }
+        catch {
+            Write-EnhancedLog -Message "Error installing module: $($_.Exception.Message)" -Level "ERROR"
+            Handle-Error -ErrorRecord $_
+            throw
+        }
+        Finally {
+            # Always log exit and cleanup actions
+            Write-EnhancedLog -Message "Exiting Install-ModuleInPS5 function" -Level "Notice"
+        }
+    }
+
+    End {
+        Write-EnhancedLog -Message "Validating module installation in PS5" -Level "INFO"
+        
+        # Validate the module installation by checking if the module is available in PS5
+        $ps5ValidateCommand = "Get-Module -ListAvailable -Name $ModuleName"
+        $moduleInstalled = Start-Process -FilePath $ps5Path -ArgumentList "-Command", $ps5ValidateCommand `
+            -NoNewWindow -PassThru -Wait
+
+        if ($moduleInstalled.ExitCode -eq 0) {
+            Write-EnhancedLog -Message "Module $ModuleName validated successfully in PS5" -Level "INFO"
+        }
+        else {
+            Write-EnhancedLog -Message "Module $ModuleName validation failed in PS5" -Level "ERROR"
+            throw "Module $ModuleName installation could not be validated in PS5"
+        }
     }
 }
 
@@ -241,12 +485,20 @@ function Install-ModuleWithPowerShell5Fallback {
     # Log the start of the module installation process
     Write-EnhancedModuleStarterLog -Message "Starting the module installation process for: $ModuleName" -Level "NOTICE"
 
+    CheckAndElevate
 
     $DBG
 
     # Check if the current PowerShell version is not 5
     if ($PSVersionTable.PSVersion.Major -ne 5) {
         Write-EnhancedModuleStarterLog -Message "Current PowerShell version is $($PSVersionTable.PSVersion). PowerShell 5 is required." -Level "WARNING"
+        # Invoke-InPowerShell5
+
+        $params = @{
+            ModuleName = "$ModuleName"
+        }
+        Install-ModuleInPS5 @params
+
     }
 
     # If already in PowerShell 5, install the module
@@ -286,35 +538,39 @@ function Check-ModuleVersionStatus {
             if ($installedModule -and $latestModule) {
                 if ($installedModule.Version -lt $latestModule.Version) {
                     $results.Add([PSCustomObject]@{
-                        ModuleName = $ModuleName
-                        Status = "Outdated"
-                        InstalledVersion = $installedModule.Version
-                        LatestVersion = $latestModule.Version
-                    })
-                } else {
-                    $results.Add([PSCustomObject]@{
-                        ModuleName = $ModuleName
-                        Status = "Up-to-date"
-                        InstalledVersion = $installedModule.Version
-                        LatestVersion = $installedModule.Version
-                    })
+                            ModuleName       = $ModuleName
+                            Status           = "Outdated"
+                            InstalledVersion = $installedModule.Version
+                            LatestVersion    = $latestModule.Version
+                        })
                 }
-            } elseif (-not $installedModule) {
-                $results.Add([PSCustomObject]@{
-                    ModuleName = $ModuleName
-                    Status = "Not Installed"
-                    InstalledVersion = $null
-                    LatestVersion = $null
-                })
-            } else {
-                $results.Add([PSCustomObject]@{
-                    ModuleName = $ModuleName
-                    Status = "Not Found in Gallery"
-                    InstalledVersion = $null
-                    LatestVersion = $null
-                })
+                else {
+                    $results.Add([PSCustomObject]@{
+                            ModuleName       = $ModuleName
+                            Status           = "Up-to-date"
+                            InstalledVersion = $installedModule.Version
+                            LatestVersion    = $installedModule.Version
+                        })
+                }
             }
-        } catch {
+            elseif (-not $installedModule) {
+                $results.Add([PSCustomObject]@{
+                        ModuleName       = $ModuleName
+                        Status           = "Not Installed"
+                        InstalledVersion = $null
+                        LatestVersion    = $null
+                    })
+            }
+            else {
+                $results.Add([PSCustomObject]@{
+                        ModuleName       = $ModuleName
+                        Status           = "Not Found in Gallery"
+                        InstalledVersion = $null
+                        LatestVersion    = $null
+                    })
+            }
+        }
+        catch {
             Write-Error "An error occurred checking module '$ModuleName': $_"
         }
     }
@@ -367,7 +623,8 @@ function Update-ModuleIfOldOrMissing {
 
                     Reset-ModulePaths
 
-                    Invoke-InPowerShell5 -ScriptPath $PSScriptRoot
+                    # Invoke-InPowerShell5 -ScriptPath $PSScriptRoot
+                    # Invoke-InPowerShell5
 
                     Install-ModuleWithPowerShell5Fallback -ModuleName $ModuleName
 
@@ -382,6 +639,7 @@ function Update-ModuleIfOldOrMissing {
                     # Install-Module -Name $ModuleName -Force -SkipPublisherCheck -Scope AllUsers
 
                     $DBG
+                    # Invoke-InPowerShell5
                     Install-ModuleWithPowerShell5Fallback -ModuleName $ModuleName
                     Write-EnhancedModuleStarterLog -Message "$ModuleName has been installed." -Level "INFO"
                 }
