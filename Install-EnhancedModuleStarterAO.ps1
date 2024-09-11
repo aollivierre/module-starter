@@ -38,15 +38,15 @@ function CheckAndElevate {
     )
 
     Begin {
-        Write-EnhancedLog -Message "Starting CheckAndElevate function" -Level "NOTICE"
+        Write-EnhancedModuleStarterLog -Message "Starting CheckAndElevate function" -Level "NOTICE"
 
         # Use .NET classes for efficiency
         try {
             $isAdmin = [System.Security.Principal.WindowsPrincipal]::new([System.Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
-            Write-EnhancedLog -Message "Checking for administrative privileges..." -Level "INFO"
+            Write-EnhancedModuleStarterLog -Message "Checking for administrative privileges..." -Level "INFO"
         }
         catch {
-            Write-EnhancedLog -Message "Error determining administrative status: $($_.Exception.Message)" -Level "ERROR"
+            Write-EnhancedModuleStarterLog -Message "Error determining administrative status: $($_.Exception.Message)" -Level "ERROR"
             Handle-Error -ErrorRecord $_
             throw $_
         }
@@ -56,7 +56,7 @@ function CheckAndElevate {
         if (-not $isAdmin) {
             if ($ElevateIfNotAdmin) {
                 try {
-                    Write-EnhancedLog -Message "The script is not running with administrative privileges. Attempting to elevate..." -Level "WARNING"
+                    Write-EnhancedModuleStarterLog -Message "The script is not running with administrative privileges. Attempting to elevate..." -Level "WARNING"
 
                     $powerShellPath = Get-PowerShellPath
                     $startProcessParams = @{
@@ -66,26 +66,26 @@ function CheckAndElevate {
                     }
                     Start-Process @startProcessParams
 
-                    Write-EnhancedLog -Message "Script re-launched with administrative privileges. Exiting current session." -Level "INFO"
+                    Write-EnhancedModuleStarterLog -Message "Script re-launched with administrative privileges. Exiting current session." -Level "INFO"
                     exit
                 }
                 catch {
-                    Write-EnhancedLog -Message "Failed to elevate privileges: $($_.Exception.Message)" -Level "ERROR"
+                    Write-EnhancedModuleStarterLog -Message "Failed to elevate privileges: $($_.Exception.Message)" -Level "ERROR"
                     Handle-Error -ErrorRecord $_
                     throw $_
                 }
             }
             else {
-                Write-EnhancedLog -Message "The script is not running with administrative privileges and will continue without elevation." -Level "INFO"
+                Write-EnhancedModuleStarterLog -Message "The script is not running with administrative privileges and will continue without elevation." -Level "INFO"
             }
         }
         else {
-            Write-EnhancedLog -Message "Script is already running with administrative privileges." -Level "INFO"
+            Write-EnhancedModuleStarterLog -Message "Script is already running with administrative privileges." -Level "INFO"
         }
     }
 
     End {
-        Write-EnhancedLog -Message "Exiting CheckAndElevate function" -Level "NOTICE"
+        Write-EnhancedModuleStarterLog -Message "Exiting CheckAndElevate function" -Level "NOTICE"
         return $isAdmin
     }
 }
@@ -319,8 +319,8 @@ function Install-ModuleInPS5 {
     )
 
     Begin {
-        Write-EnhancedLog -Message "Starting Install-ModuleInPS5 function" -Level "Notice"
-        Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
+        Write-EnhancedModuleStarterLog -Message "Starting Install-ModuleInPS5 function" -Level "Notice"
+        # Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
 
         Reset-ModulePaths
 
@@ -337,13 +337,13 @@ function Install-ModuleInPS5 {
 
     Process {
         try {
-            Write-EnhancedLog -Message "Preparing to install module: $ModuleName in PowerShell 5" -Level "INFO"
+            Write-EnhancedModuleStarterLog -Message "Preparing to install module: $ModuleName in PowerShell 5" -Level "INFO"
 
             # PowerShell 5 command to install the module
             $ps5Command = "Install-Module -Name $ModuleName -Scope Allusers -SkipPublisherCheck -Force -Confirm:`$false"
 
             # Log the parameters being passed to Start-Process
-            Write-EnhancedLog -Message "Starting installation of module $ModuleName in PowerShell 5" -Level "INFO"
+            Write-EnhancedModuleStarterLog -Message "Starting installation of module $ModuleName in PowerShell 5" -Level "INFO"
 
             # Use Start-Process to launch PowerShell 5 and install the module
             $process = Start-Process -FilePath $ps5Path -ArgumentList "-Command", $ps5Command `
@@ -351,25 +351,25 @@ function Install-ModuleInPS5 {
 
             # Check if the process succeeded
             if ($process.ExitCode -eq 0) {
-                Write-EnhancedLog -Message "Module '$ModuleName' installed successfully in PS5" -Level "INFO"
+                Write-EnhancedModuleStarterLog -Message "Module '$ModuleName' installed successfully in PS5" -Level "INFO"
             }
             else {
-                Write-EnhancedLog -Message "Error occurred during module installation. Exit Code: $($process.ExitCode)" -Level "ERROR"
+                Write-EnhancedModuleStarterLog -Message "Error occurred during module installation. Exit Code: $($process.ExitCode)" -Level "ERROR"
             }
         }
         catch {
-            Write-EnhancedLog -Message "Error installing module: $($_.Exception.Message)" -Level "ERROR"
+            Write-EnhancedModuleStarterLog -Message "Error installing module: $($_.Exception.Message)" -Level "ERROR"
             Handle-Error -ErrorRecord $_
             throw
         }
         Finally {
             # Always log exit and cleanup actions
-            Write-EnhancedLog -Message "Exiting Install-ModuleInPS5 function" -Level "Notice"
+            Write-EnhancedModuleStarterLog -Message "Exiting Install-ModuleInPS5 function" -Level "Notice"
         }
     }
 
     End {
-        Write-EnhancedLog -Message "Validating module installation in PS5" -Level "INFO"
+        Write-EnhancedModuleStarterLog -Message "Validating module installation in PS5" -Level "INFO"
         
         # Validate the module installation by checking if the module is available in PS5
         $ps5ValidateCommand = "Get-Module -ListAvailable -Name $ModuleName"
@@ -377,10 +377,10 @@ function Install-ModuleInPS5 {
             -NoNewWindow -PassThru -Wait
 
         if ($moduleInstalled.ExitCode -eq 0) {
-            Write-EnhancedLog -Message "Module $ModuleName validated successfully in PS5" -Level "INFO"
+            Write-EnhancedModuleStarterLog -Message "Module $ModuleName validated successfully in PS5" -Level "INFO"
         }
         else {
-            Write-EnhancedLog -Message "Module $ModuleName validation failed in PS5" -Level "ERROR"
+            Write-EnhancedModuleStarterLog -Message "Module $ModuleName validation failed in PS5" -Level "ERROR"
             throw "Module $ModuleName installation could not be validated in PS5"
         }
     }
