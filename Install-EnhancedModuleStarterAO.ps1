@@ -318,10 +318,6 @@ function Install-ModuleInPS5 {
         Write-EnhancedModuleStarterLog -Message "Starting Install-ModuleInPS5 function" -Level "Notice"
         # Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
 
-        Reset-ModulePaths
-
-        CheckAndElevate -ElevateIfNotAdmin $true
-
         # Path to PowerShell 5
         $ps5Path = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
 
@@ -333,24 +329,33 @@ function Install-ModuleInPS5 {
 
     Process {
         try {
-            Write-EnhancedModuleStarterLog -Message "Preparing to install module: $ModuleName in PowerShell 5" -Level "INFO"
+            if ($PSVersionTable.PSVersion.Major -eq 5) {
+                # If already in PowerShell 5, install the module directly
+                Write-EnhancedModuleStarterLog -Message "Already running in PowerShell 5, installing module directly." -Level "INFO"
+                Install-Module -Name $ModuleName -Scope AllUsers -SkipPublisherCheck -AllowClobber -Force -Confirm:$false
+            } else {
+                # If not in PowerShell 5, use Start-Process to switch to PowerShell 5
+                Write-EnhancedModuleStarterLog -Message "Preparing to install module: $ModuleName in PowerShell 5" -Level "INFO"
 
-            # PowerShell 5 command to install the module
-            $ps5Command = "Install-Module -Name $ModuleName -Scope Allusers -SkipPublisherCheck -Force -Confirm:`$false"
+                $ps5Command = "Install-Module -Name $ModuleName -Scope AllUsers -SkipPublisherCheck -AllowClobber -Force -Confirm:`$false"
 
-            # Log the parameters being passed to Start-Process
-            Write-EnhancedModuleStarterLog -Message "Starting installation of module $ModuleName in PowerShell 5" -Level "INFO"
+                # Splatting for Start-Process
+                $startProcessParams = @{
+                    FilePath        = $ps5Path
+                    ArgumentList    = "-Command", $ps5Command
+                    Wait            = $true
+                    NoNewWindow     = $true
+                    PassThru        = $true
+                }
 
-            # Use Start-Process to launch PowerShell 5 and install the module
-            $process = Start-Process -FilePath $ps5Path -ArgumentList "-Command", $ps5Command `
-                -Wait -NoNewWindow -PassThru
+                Write-EnhancedModuleStarterLog -Message "Starting installation of module $ModuleName in PowerShell 5" -Level "INFO"
+                $process = Start-Process @startProcessParams
 
-            # Check if the process succeeded
-            if ($process.ExitCode -eq 0) {
-                Write-EnhancedModuleStarterLog -Message "Module '$ModuleName' installed successfully in PS5" -Level "INFO"
-            }
-            else {
-                Write-EnhancedModuleStarterLog -Message "Error occurred during module installation. Exit Code: $($process.ExitCode)" -Level "ERROR"
+                if ($process.ExitCode -eq 0) {
+                    Write-EnhancedModuleStarterLog -Message "Module '$ModuleName' installed successfully in PS5" -Level "INFO"
+                } else {
+                    Write-EnhancedModuleStarterLog -Message "Error occurred during module installation. Exit Code: $($process.ExitCode)" -Level "ERROR"
+                }
             }
         }
         catch {
@@ -358,27 +363,37 @@ function Install-ModuleInPS5 {
             Handle-Error -ErrorRecord $_
             throw
         }
-        Finally {
-            # Always log exit and cleanup actions
+        finally {
             Write-EnhancedModuleStarterLog -Message "Exiting Install-ModuleInPS5 function" -Level "Notice"
         }
     }
 
     End {
         Write-EnhancedModuleStarterLog -Message "Validating module installation in PS5" -Level "INFO"
-        
-        # Validate the module installation by checking if the module is available in PS5
-        $ps5ValidateCommand = "Get-Module -ListAvailable -Name $ModuleName"
-        $moduleInstalled = Start-Process -FilePath $ps5Path -ArgumentList "-Command", $ps5ValidateCommand `
-            -NoNewWindow -PassThru -Wait
 
-        if ($moduleInstalled.ExitCode -eq 0) {
-            Write-EnhancedModuleStarterLog -Message "Module $ModuleName validated successfully in PS5" -Level "INFO"
+        if ($PSVersionTable.PSVersion.Major -eq 5) {
+            # Validate directly in PowerShell 5
+            $module = Get-Module -ListAvailable -Name $ModuleName
+        } else {
+            # Use Start-Process to validate in PowerShell 5
+            $ps5ValidateCommand = "Get-Module -ListAvailable -Name $ModuleName"
+
+            $validateProcessParams = @{
+                FilePath        = $ps5Path
+                ArgumentList    = "-Command", $ps5ValidateCommand
+                NoNewWindow     = $true
+                PassThru        = $true
+                Wait            = $true
+            }
+
+            $moduleInstalled = Start-Process @validateProcessParams
+            if ($moduleInstalled.ExitCode -ne 0) {
+                Write-EnhancedModuleStarterLog -Message "Module $ModuleName validation failed in PS5" -Level "ERROR"
+                throw "Module $ModuleName installation could not be validated in PS5"
+            }
         }
-        else {
-            Write-EnhancedModuleStarterLog -Message "Module $ModuleName validation failed in PS5" -Level "ERROR"
-            throw "Module $ModuleName installation could not be validated in PS5"
-        }
+
+        Write-EnhancedModuleStarterLog -Message "Module $ModuleName validated successfully in PS5" -Level "INFO"
     }
 }
 
