@@ -271,7 +271,7 @@ function Remove-OldVersions {
 
                 Write-EnhancedModuleStarterLog -Message "Starting takeown and icacls for $modulePath" -Level "INFO"
                 Write-EnhancedModuleStarterLog -Message "Checking and elevating to admin if needed" -Level "INFO"
-                CheckAndElevate
+                CheckAndElevate -ElevateIfNotAdmin $true
                 & takeown.exe /F $modulePath /A /R
                 & icacls.exe $modulePath /reset
                 & icacls.exe $modulePath /grant "*S-1-5-32-544:F" /inheritance:d /T
@@ -289,89 +289,7 @@ function Remove-OldVersions {
     end {
         Write-EnhancedModuleStarterLog -Message "Remove-OldVersions function execution completed for module: $ModuleName" -Level "INFO"
     }
-}
-
-# function Invoke-InPowerShell5 {
-#     <#
-#     .SYNOPSIS
-#     Relaunches the script in PowerShell 5 (x64) if the current session is not already running in PowerShell 5.
-
-#     .PARAMETER ScriptPath
-#     The full path to the script that needs to be executed in PowerShell 5 (x64).
-
-#     .DESCRIPTION
-#     This function checks if the current PowerShell session is running in PowerShell 5. If not, it relaunches the specified script in PowerShell 5 (x64) with elevated privileges.
-
-#     .EXAMPLE
-#     Invoke-InPowerShell5 -ScriptPath "C:\Scripts\MyScript.ps1"
-#     #>
-
-#     [CmdletBinding()]
-#     param (
-#         [Parameter(Mandatory = $false, HelpMessage = "Provide the full path to the script to be run in PowerShell 5.")]
-#         [ValidateNotNullOrEmpty()]
-#         [string]$ScriptPath
-#     )
-
-#     Begin {
-#         # Log parameters
-#         Write-EnhancedLog -Message "Starting Invoke-InPowerShell5 function." -Level "Notice"
-#         Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
-
-#         CheckAndElevate
-
-#         # Log the start of the process
-#         Write-EnhancedLog -Message "Checking PowerShell version." -Level "INFO"
-#     }
-
-#     Process {
-#         try {
-#             # Check if we're not in PowerShell 5
-#             if ($PSVersionTable.PSVersion.Major -ne 5) {
-#                 Write-EnhancedLog -Message "Relaunching script in PowerShell 5 (x64)..." -Level "WARNING"
-
-#                 # Get the path to PowerShell 5 (x64)
-#                 $ps5x64Path = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-
-#                 # Define arguments for the Start-Process command
-#                 $arguments = @(
-#                     "-NoExit"
-#                     "-NoProfile"
-#                     "-ExecutionPolicy", "Bypass"
-#                     "-File", "`"$PSCommandPath`""
-#                     # "-File", "`"$ScriptPath`""
-#                 )
-
-#                 # Launch in PowerShell 5 (x64) with elevated privileges
-#                 $startProcessParams64 = @{
-#                     FilePath     = $ps5x64Path
-#                     ArgumentList = $arguments
-#                     # ArgumentList = @("-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"")
-#                     Verb         = "RunAs"
-#                     PassThru     = $true
-#                 }
-
-#                 Write-EnhancedLog -Message "Starting PowerShell 5 (x64) to perform the update..." -Level "NOTICE"
-#                 $process64 = Start-Process @startProcessParams64
-#                 $process64.WaitForExit()
-
-#                 Write-EnhancedLog -Message "PowerShell 5 (x64) process completed." -Level "NOTICE"
-#                 Exit
-#             } else {
-#                 Write-EnhancedLog -Message "Already running in PowerShell 5. No need to relaunch." -Level "INFO"
-#             }
-#         }
-#         catch {
-#             Write-EnhancedLog -Message "Error occurred while relaunching script in PowerShell 5: $($_.Exception.Message)" -Level "ERROR"
-#             Handle-Error -ErrorRecord $_
-#             throw
-#         }
-#     }
-
-#     End {
-#         Write-EnhancedLog -Message "Exiting Invoke-InPowerShell5 function." -Level "Notice"
-#     }
-# }
+}           
 
 
 function Install-ModuleInPS5 {
@@ -404,6 +322,10 @@ function Install-ModuleInPS5 {
         Write-EnhancedLog -Message "Starting Install-ModuleInPS5 function" -Level "Notice"
         Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
 
+        Reset-ModulePaths
+
+        CheckAndElevate -ElevateIfNotAdmin $true
+
         # Path to PowerShell 5
         $ps5Path = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
 
@@ -416,19 +338,6 @@ function Install-ModuleInPS5 {
     Process {
         try {
             Write-EnhancedLog -Message "Preparing to install module: $ModuleName in PowerShell 5" -Level "INFO"
-
-            # Get current timestamp
-            # $timestamp = (Get-Date).ToString("yyyy-MM-dd_HH-mm-ss")
-
-            # Create dynamic log directory path
-            # $logDir = "C:\logs\PSModule_Install"
-            # $logFile = "$logDir\InstallLog_$timestamp.log"
-
-            # Check if the log directory exists, and create it if not
-            # if (-not (Test-Path $logDir)) {
-            # Write-EnhancedLog -Message "Log directory does not exist. Creating directory: $logDir" -Level "INFO"
-            # New-Item -Path $logDir -ItemType Directory -Force
-            # }
 
             # PowerShell 5 command to install the module
             $ps5Command = "Install-Module -Name $ModuleName -Scope Allusers -SkipPublisherCheck -Force -Confirm:`$false"
@@ -485,7 +394,10 @@ function Install-ModuleWithPowerShell5Fallback {
     # Log the start of the module installation process
     Write-EnhancedModuleStarterLog -Message "Starting the module installation process for: $ModuleName" -Level "NOTICE"
 
-    CheckAndElevate
+
+    Reset-ModulePaths
+
+    CheckAndElevate -ElevateIfNotAdmin $true
 
     $DBG
 
@@ -621,7 +533,7 @@ function Update-ModuleIfOldOrMissing {
                     # Install the latest version of the module
                     # Install-Module -Name $ModuleName -Force -SkipPublisherCheck -Scope AllUsers
 
-                    Reset-ModulePaths
+                    
 
                     # Invoke-InPowerShell5 -ScriptPath $PSScriptRoot
                     # Invoke-InPowerShell5
