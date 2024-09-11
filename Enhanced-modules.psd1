@@ -1,6 +1,5 @@
 @{
     requiredModules = @(
-        "EnhancedBoilerPlateAO",
         "EnhancedAO.Graph.SignInLogs",
         "EnhancedDeviceMigrationAO",
         "EnhancedFileManagerAO",
