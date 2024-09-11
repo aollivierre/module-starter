@@ -1,7 +1,3 @@
-function Is-RunningInPS5 {
-    return ($PSVersionTable.PSVersion.Major -eq 5)
-}
-
 function CheckAndElevate {
     <#
     .SYNOPSIS
@@ -386,46 +382,6 @@ function Install-ModuleInPS5 {
     }
 }
 
-function Install-ModuleWithPowerShell5Fallback {
-    param (
-        [string]$ModuleName
-    )
-
-    # Log the start of the module installation process
-    Write-EnhancedModuleStarterLog -Message "Starting the module installation process for: $ModuleName" -Level "NOTICE"
-
-
-    Reset-ModulePaths
-
-    CheckAndElevate -ElevateIfNotAdmin $true
-
-    $DBG
-
-    # Check if the current PowerShell version is not 5
-    if ($PSVersionTable.PSVersion.Major -ne 5) {
-        Write-EnhancedModuleStarterLog -Message "Current PowerShell version is $($PSVersionTable.PSVersion). PowerShell 5 is required." -Level "WARNING"
-        # Invoke-InPowerShell5
-
-        $params = @{
-            ModuleName = "$ModuleName"
-        }
-        Install-ModuleInPS5 @params
-
-    }
-
-    # If already in PowerShell 5, install the module
-    Write-EnhancedModuleStarterLog -Message "Current PowerShell version is 5. Proceeding with module installation." -Level "INFO"
-    Write-EnhancedModuleStarterLog -Message "Installing module: $ModuleName in PowerShell 5" -Level "NOTICE"
-
-    try {
-        Install-Module -Name $ModuleName -Force -SkipPublisherCheck -Scope AllUsers
-        Write-EnhancedModuleStarterLog -Message "Module $ModuleName installed successfully in PowerShell 5." -Level "INFO"
-    }
-    catch {
-        Write-EnhancedModuleStarterLog -Message "Failed to install module $ModuleName. Error: $_" -Level "ERROR"
-    }
-}
-
 function Check-ModuleVersionStatus {
     [CmdletBinding()]
     param (
@@ -538,7 +494,12 @@ function Update-ModuleIfOldOrMissing {
                     # Invoke-InPowerShell5 -ScriptPath $PSScriptRoot
                     # Invoke-InPowerShell5
 
-                    Install-ModuleWithPowerShell5Fallback -ModuleName $ModuleName
+                    $params = @{
+                        ModuleName = "$ModuleName"
+                    }
+                    Install-ModuleInPS5 @params
+
+                    # Install-ModuleWithPowerShell5Fallback -ModuleName $ModuleName
 
                     Write-EnhancedModuleStarterLog -Message "$ModuleName has been updated to the latest version." -Level "INFO"
                 }
@@ -550,9 +511,16 @@ function Update-ModuleIfOldOrMissing {
                     Write-EnhancedModuleStarterLog -Message "$ModuleName is not installed. Installing the latest version..." -Level "WARNING"
                     # Install-Module -Name $ModuleName -Force -SkipPublisherCheck -Scope AllUsers
 
-                    $DBG
+                    # $DBG
+
+
+                    $params = @{
+                        ModuleName = "$ModuleName"
+                    }
+                    Install-ModuleInPS5 @params
+
                     # Invoke-InPowerShell5
-                    Install-ModuleWithPowerShell5Fallback -ModuleName $ModuleName
+                    # Install-ModuleWithPowerShell5Fallback -ModuleName $ModuleName
                     Write-EnhancedModuleStarterLog -Message "$ModuleName has been installed." -Level "INFO"
                 }
                 "Not Found in Gallery" {
