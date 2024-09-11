@@ -151,6 +151,42 @@ function Write-EnhancedModuleStarterLog {
     $formattedMessage | Out-File -FilePath $logFilePath -Append -Encoding utf8
 }
 
+function Log-Params {
+    <#
+    .SYNOPSIS
+    Logs the provided parameters and their values with the parent function name appended.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Params
+    )
+
+    Begin {
+        # Get the name of the parent function
+        $parentFunctionName = (Get-PSCallStack)[1].Command
+
+        # Write-EnhancedModuleStarterLog -Message "Starting Log-Params function in $parentFunctionName" -Level "INFO"
+    }
+
+    Process {
+        try {
+            foreach ($key in $Params.Keys) {
+                # Append the parent function name to the key
+                $enhancedKey = "$parentFunctionName.$key"
+                Write-EnhancedModuleStarterLog -Message "$enhancedKey $($Params[$key])" -Level "INFO"
+            }
+        } catch {
+            Write-EnhancedModuleStarterLog -Message "An error occurred while logging parameters in $parentFunctionName $($_.Exception.Message)" -Level "ERROR"
+            Handle-Error -ErrorRecord $_
+        }
+    }
+
+    End {
+        # Write-EnhancedModuleStarterLog -Message "Exiting Log-Params function in $parentFunctionName" -Level "INFO"
+    }
+}
+
 function Reset-ModulePaths {
     [CmdletBinding()]
     param ()
@@ -403,68 +439,117 @@ function Install-ModuleInPS5 {
 }
 
 function Check-ModuleVersionStatus {
+    <#
+    .SYNOPSIS
+    Checks the installed and latest versions of PowerShell modules.
+
+    .DESCRIPTION
+    The Check-ModuleVersionStatus function checks if the specified PowerShell modules are installed and compares their versions with the latest available version in the PowerShell Gallery. It logs the checking process and handles errors gracefully.
+
+    .PARAMETER ModuleNames
+    The names of the PowerShell modules to check for version status.
+
+    .EXAMPLE
+    $params = @{
+        ModuleNames = @('Pester', 'AzureRM', 'PowerShellGet')
+    }
+    Check-ModuleVersionStatus @params
+    Checks the version status of the specified modules.
+    #>
+
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $true, HelpMessage = "Provide the names of the modules to check.")]
+        [ValidateNotNullOrEmpty()]
         [string[]]$ModuleNames
     )
 
-    #the following modules PowerShellGet and PackageManagement has to be either automatically imported or manually imported into C:\windows\System32\WindowsPowerShell\v1.0\Modules
+    Begin {
+        Write-EnhancedModuleStarterLog -Message "Starting Check-ModuleVersionStatus function" -Level "Notice"
+        Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
 
-    Import-Module -Name PowerShellGet -ErrorAction SilentlyContinue
-
-    $results = [System.Collections.Generic.List[PSObject]]::new()  # Initialize a List to hold the results
-
-    foreach ($ModuleName in $ModuleNames) {
+        # Import PowerShellGet if it's not already loaded
+        Write-EnhancedModuleStarterLog -Message "Importing necessary modules (PowerShellGet)." -Level "INFO"
         try {
+            Import-Module -Name PowerShellGet -ErrorAction SilentlyContinue
+        } catch {
+            Write-EnhancedModuleStarterLog -Message "Failed to import PowerShellGet: $($_.Exception.Message)" -Level "ERROR"
+            Handle-Error -ErrorRecord $_
+            throw
+        }
 
-            Write-EnhancedModuleStarterLog -Message "Checking module $ModuleName"
-            $installedModule = Get-Module -ListAvailable -Name $ModuleName | Sort-Object Version -Descending | Select-Object -First 1
-            # $installedModule = Check-SystemWideModule -ModuleName 'Pester'
-            $latestModule = Find-Module -Name $ModuleName -ErrorAction SilentlyContinue
+        # Initialize a list to hold the results
+        $results = [System.Collections.Generic.List[PSObject]]::new()
+    }
 
-            if ($installedModule -and $latestModule) {
-                if ($installedModule.Version -lt $latestModule.Version) {
-                    $results.Add([PSCustomObject]@{
+    Process {
+        foreach ($ModuleName in $ModuleNames) {
+            try {
+                Write-EnhancedModuleStarterLog -Message "Checking module: $ModuleName" -Level "INFO"
+                
+                # Get installed module details
+                $installedModule = Get-Module -ListAvailable -Name $ModuleName | Sort-Object Version -Descending | Select-Object -First 1
+                
+                # Get latest module version from the PowerShell Gallery
+                $latestModule = Find-Module -Name $ModuleName -ErrorAction SilentlyContinue
+
+                if ($installedModule -and $latestModule) {
+                    if ($installedModule.Version -lt $latestModule.Version) {
+                        $results.Add([PSCustomObject]@{
                             ModuleName       = $ModuleName
                             Status           = "Outdated"
                             InstalledVersion = $installedModule.Version
                             LatestVersion    = $latestModule.Version
                         })
-                }
-                else {
-                    $results.Add([PSCustomObject]@{
+                        Write-EnhancedModuleStarterLog -Message "Module $ModuleName is outdated. Installed: $($installedModule.Version), Latest: $($latestModule.Version)" -Level "INFO"
+                    } else {
+                        $results.Add([PSCustomObject]@{
                             ModuleName       = $ModuleName
                             Status           = "Up-to-date"
                             InstalledVersion = $installedModule.Version
                             LatestVersion    = $installedModule.Version
                         })
-                }
-            }
-            elseif (-not $installedModule) {
-                $results.Add([PSCustomObject]@{
+                        Write-EnhancedModuleStarterLog -Message "Module $ModuleName is up-to-date. Version: $($installedModule.Version)" -Level "INFO"
+                    }
+                } elseif (-not $installedModule) {
+                    $results.Add([PSCustomObject]@{
                         ModuleName       = $ModuleName
                         Status           = "Not Installed"
                         InstalledVersion = $null
                         LatestVersion    = $null
                     })
-            }
-            else {
-                $results.Add([PSCustomObject]@{
+                    Write-EnhancedModuleStarterLog -Message "Module $ModuleName is not installed." -Level "INFO"
+                } else {
+                    $results.Add([PSCustomObject]@{
                         ModuleName       = $ModuleName
                         Status           = "Not Found in Gallery"
-                        InstalledVersion = $null
+                        InstalledVersion = $installedModule.Version
                         LatestVersion    = $null
                     })
+                    Write-EnhancedModuleStarterLog -Message "Module $ModuleName is installed but not found in the PowerShell Gallery." -Level "WARNING"
+                }
+            } catch {
+                Write-EnhancedModuleStarterLog -Message "Error occurred while checking module '$ModuleName': $($_.Exception.Message)" -Level "ERROR"
+                Handle-Error -ErrorRecord $_
+                throw
             }
-        }
-        catch {
-            Write-Error "An error occurred checking module '$ModuleName': $_"
         }
     }
 
-    return $results
+    End {
+        Write-EnhancedModuleStarterLog -Message "Exiting Check-ModuleVersionStatus function" -Level "Notice"
+        # Return the results
+        return $results
+    }
 }
+
+# Example usage:
+# $params = @{
+#     ModuleNames = @('Pester', 'AzureRM', 'PowerShellGet')
+# }
+# $versionStatuses = Check-ModuleVersionStatus @params
+# $versionStatuses | Format-Table -AutoSize
+
 
 function Update-ModuleIfOldOrMissing {
     <#
