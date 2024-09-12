@@ -425,7 +425,7 @@ function Install-ModuleInPS5 {
 
             $validateProcessParams = @{
                 FilePath     = $ps5Path
-                ArgumentList = "-Command", $ps5ValidateCommand
+                ArgumentList = "-NoProfile", "-Command", $ps5ValidateCommand
                 NoNewWindow  = $true
                 PassThru     = $true
                 Wait         = $true
