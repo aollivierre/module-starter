@@ -385,7 +385,7 @@ function Install-ModuleInPS5 {
                 # Splatting for Start-Process
                 $startProcessParams = @{
                     FilePath     = $ps5Path
-                    ArgumentList = "-NoProfile", "-Command", $ps5Command
+                    ArgumentList = "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $ps5Command
                     Wait         = $true
                     NoNewWindow  = $true
                     PassThru     = $true
@@ -425,7 +425,7 @@ function Install-ModuleInPS5 {
 
             $validateProcessParams = @{
                 FilePath     = $ps5Path
-                ArgumentList = "-NoProfile", "-Command", $ps5ValidateCommand
+                ArgumentList = "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $ps5ValidateCommand
                 NoNewWindow  = $true
                 PassThru     = $true
                 Wait         = $true
