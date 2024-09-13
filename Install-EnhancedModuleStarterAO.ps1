@@ -357,6 +357,8 @@ function Install-ModuleInPS5 {
 
         Reset-ModulePaths
 
+        Ensure-NuGetProvider
+
         CheckAndElevate -ElevateIfNotAdmin $true
 
 
