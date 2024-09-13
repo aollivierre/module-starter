@@ -462,25 +462,25 @@ function Ensure-NuGetProvider {
     param ()
 
     Begin {
-        Write-EnhancedModuleStarterLog -Message "Starting Ensure-NuGetProvider function" -Level "Notice"
+        Write-EnhancedLog -Message "Starting Ensure-NuGetProvider function" -Level "Notice"
         
         # Log the current PowerShell version
-        Write-EnhancedModuleStarterLog -Message "Running PowerShell version: $($PSVersionTable.PSVersion)" -Level "INFO"
+        Write-EnhancedLog -Message "Running PowerShell version: $($PSVersionTable.PSVersion)" -Level "INFO"
     }
 
     Process {
         try {
             # Check if running in PowerShell 5
             if ($PSVersionTable.PSVersion.Major -eq 5) {
-                Write-EnhancedModuleStarterLog -Message "Running in PowerShell version 5, checking NuGet provider..." -Level "INFO"
+                Write-EnhancedLog -Message "Running in PowerShell version 5, checking NuGet provider..." -Level "INFO"
 
                 # Check if the NuGet provider is installed
                 if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
-                    Write-EnhancedModuleStarterLog -Message "NuGet provider not found. Installing NuGet provider..." -Level "INFO"
+                    Write-EnhancedLog -Message "NuGet provider not found. Installing NuGet provider..." -Level "INFO"
 
-                    # Install the NuGet provider
-                    Install-PackageProvider -Name NuGet -Force:$true -Confirm:$false
-                    Write-EnhancedModuleStarterLog -Message "NuGet provider installed successfully." -Level "INFO"
+                    # Install the NuGet provider with ForceBootstrap to bypass the prompt
+                    Install-PackageProvider -Name NuGet -ForceBootstrap -Force -Confirm:$false
+                    Write-EnhancedLog -Message "NuGet provider installed successfully." -Level "INFO"
                     
                     # Install the PowerShellGet module
                     $params = @{
@@ -489,22 +489,22 @@ function Ensure-NuGetProvider {
                     Install-ModuleInPS5 @params
 
                 } else {
-                    Write-EnhancedModuleStarterLog -Message "NuGet provider is already installed." -Level "INFO"
+                    Write-EnhancedLog -Message "NuGet provider is already installed." -Level "INFO"
                 }
             }
             else {
-                Write-EnhancedModuleStarterLog -Message "This script is running in PowerShell version $($PSVersionTable.PSVersion), which is not version 5. No action is taken for NuGet." -Level "INFO"
+                Write-EnhancedLog -Message "This script is running in PowerShell version $($PSVersionTable.PSVersion), which is not version 5. No action is taken for NuGet." -Level "INFO"
             }
         }
         catch {
-            Write-EnhancedModuleStarterLog -Message "Error encountered during NuGet provider installation: $($_.Exception.Message)" -Level "ERROR"
+            Write-EnhancedLog -Message "Error encountered during NuGet provider installation: $($_.Exception.Message)" -Level "ERROR"
             Handle-Error -ErrorRecord $_
             throw
         }
     }
 
     End {
-        Write-EnhancedModuleStarterLog -Message "Exiting Ensure-NuGetProvider function" -Level "Notice"
+        Write-EnhancedLog -Message "Exiting Ensure-NuGetProvider function" -Level "Notice"
     }
 }
 
@@ -541,6 +541,8 @@ function Check-ModuleVersionStatus {
         Write-EnhancedModuleStarterLog -Message "Starting Check-ModuleVersionStatus function" -Level "Notice"
         Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
 
+        Ensure-NuGetProvider
+
         # Import PowerShellGet if it's not already loaded
         Write-EnhancedModuleStarterLog -Message "Importing necessary modules (PowerShellGet)." -Level "INFO"
         try {
@@ -551,8 +553,6 @@ function Check-ModuleVersionStatus {
             Handle-Error -ErrorRecord $_
             throw
         }
-
-        Ensure-NuGetProvider
 
         # Initialize a list to hold the results
         $results = [System.Collections.Generic.List[PSObject]]::new()
