@@ -288,7 +288,7 @@ function Remove-OldVersions {
 
     begin {
         Write-EnhancedModuleStarterLog -Message "Starting Remove-OldVersions function for module: $ModuleName" -Level "INFO"
-        # Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
+        Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
     }
 
     process {
@@ -353,7 +353,7 @@ function Install-ModuleInPS5 {
 
     Begin {
         Write-EnhancedModuleStarterLog -Message "Starting Install-ModuleInPS5 function" -Level "Notice"
-        # Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
+        Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
 
         Reset-ModulePaths
 
@@ -476,7 +476,7 @@ function Ensure-NuGetProvider {
 
                 # Check if the NuGet provider is installed
                 # if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
-                    Write-EnhancedModuleStarterLog -Message "NuGet provider not found. Installing NuGet provider..." -Level "INFO"
+                    Write-EnhancedModuleStarterLog -Message "Installing NuGet provider..." -Level "INFO"
 
                     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -660,7 +660,7 @@ function Update-ModuleIfOldOrMissing {
 
     begin {
         Write-EnhancedModuleStarterLog -Message "Starting Update-ModuleIfOldOrMissing function for module: $ModuleName" -Level "Notice"
-        # Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
+        Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
 
         Ensure-NuGetProvider
     }
