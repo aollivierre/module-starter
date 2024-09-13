@@ -446,27 +446,69 @@ function Install-ModuleInPS5 {
 
 
 function Ensure-NuGetProvider {
-    # Ensure NuGet provider and PowerShellGet module are installed if running in PowerShell 5
-    if ($PSVersionTable.PSVersion.Major -eq 5) {
-        if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
-            Install-PackageProvider -Name NuGet -Force -Confirm:$false
-            # Install-Module -Name PowerShellGet -Scope AllUsers -Force -AllowClobber
+    <#
+    .SYNOPSIS
+    Ensures that the NuGet provider and PowerShellGet module are installed when running in PowerShell 5.
 
-            $params = @{
-                ModuleName = "PowerShellGet"
+    .DESCRIPTION
+    This function checks if the NuGet provider is installed when running in PowerShell 5. If not, it installs the NuGet provider and ensures that the PowerShellGet module is installed as well.
+
+    .EXAMPLE
+    Ensure-NuGetProvider
+    Ensures the NuGet provider is installed on a PowerShell 5 system.
+    #>
+
+    [CmdletBinding()]
+    param ()
+
+    Begin {
+        Write-EnhancedModuleStarterLog -Message "Starting Ensure-NuGetProvider function" -Level "Notice"
+        
+        # Log the current PowerShell version
+        Write-EnhancedModuleStarterLog -Message "Running PowerShell version: $($PSVersionTable.PSVersion)" -Level "INFO"
+    }
+
+    Process {
+        try {
+            # Check if running in PowerShell 5
+            if ($PSVersionTable.PSVersion.Major -eq 5) {
+                Write-EnhancedModuleStarterLog -Message "Running in PowerShell version 5, checking NuGet provider..." -Level "INFO"
+
+                # Check if the NuGet provider is installed
+                if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+                    Write-EnhancedModuleStarterLog -Message "NuGet provider not found. Installing NuGet provider..." -Level "INFO"
+
+                    # Install the NuGet provider
+                    Install-PackageProvider -Name NuGet -Force:$true -Confirm:$false
+                    Write-EnhancedModuleStarterLog -Message "NuGet provider installed successfully." -Level "INFO"
+                    
+                    # Install the PowerShellGet module
+                    $params = @{
+                        ModuleName = "PowerShellGet"
+                    }
+                    Install-ModuleInPS5 @params
+
+                } else {
+                    Write-EnhancedModuleStarterLog -Message "NuGet provider is already installed." -Level "INFO"
+                }
             }
-            Install-ModuleInPS5 @params
-
-            Write-EnhancedModuleStarterLog -Message "NuGet provider installed successfully." -Level "INFO"
+            else {
+                Write-EnhancedModuleStarterLog -Message "This script is running in PowerShell version $($PSVersionTable.PSVersion), which is not version 5. No action is taken for NuGet." -Level "INFO"
+            }
         }
-        else {
-            Write-EnhancedModuleStarterLog -Message "NuGet provider is already installed." -Level "INFO"
+        catch {
+            Write-EnhancedModuleStarterLog -Message "Error encountered during NuGet provider installation: $($_.Exception.Message)" -Level "ERROR"
+            Handle-Error -ErrorRecord $_
+            throw
         }
     }
-    else {
-        Write-EnhancedModuleStarterLog -Message "This script is running in PowerShell version $($PSVersionTable.PSVersion) which is not version 5. No action is taken for NuGet" -Level "INFO"
+
+    End {
+        Write-EnhancedModuleStarterLog -Message "Exiting Ensure-NuGetProvider function" -Level "Notice"
     }
 }
+
+
 
 
 function Check-ModuleVersionStatus {
