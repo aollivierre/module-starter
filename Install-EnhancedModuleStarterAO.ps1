@@ -357,7 +357,7 @@ function Install-ModuleInPS5 {
 
         Reset-ModulePaths
 
-        Ensure-NuGetProvider
+        # Ensure-NuGetProvider
 
         CheckAndElevate -ElevateIfNotAdmin $true
 
@@ -543,7 +543,7 @@ function Check-ModuleVersionStatus {
         Write-EnhancedModuleStarterLog -Message "Starting Check-ModuleVersionStatus function" -Level "Notice"
         Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
 
-        Ensure-NuGetProvider
+        # Ensure-NuGetProvider
 
         # Import PowerShellGet if it's not already loaded
         Write-EnhancedModuleStarterLog -Message "Importing necessary modules (PowerShellGet)." -Level "INFO"
