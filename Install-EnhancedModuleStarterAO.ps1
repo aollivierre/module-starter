@@ -485,6 +485,8 @@ function Check-ModuleVersionStatus {
             throw
         }
 
+        Ensure-NuGetProvider
+
         # Initialize a list to hold the results
         $results = [System.Collections.Generic.List[PSObject]]::new()
     }
