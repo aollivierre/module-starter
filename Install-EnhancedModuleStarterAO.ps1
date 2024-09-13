@@ -475,13 +475,13 @@ function Ensure-NuGetProvider {
                 Write-EnhancedModuleStarterLog -Message "Running in PowerShell version 5, checking NuGet provider..." -Level "INFO"
 
                 # Check if the NuGet provider is installed
-                if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+                # if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
                     Write-EnhancedModuleStarterLog -Message "NuGet provider not found. Installing NuGet provider..." -Level "INFO"
 
                     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
                     # Install the NuGet provider with ForceBootstrap to bypass the prompt
-                    Install-PackageProvider -Name NuGet -ForceBootstrap -Force -Confirm:$false
+                    Install-PackageProvider -Name NuGet -ForceBootstrap:$true -Force:$true -Confirm:$false
                     Write-EnhancedModuleStarterLog -Message "NuGet provider installed successfully." -Level "INFO"
                     
                     # Install the PowerShellGet module
@@ -490,9 +490,9 @@ function Ensure-NuGetProvider {
                     }
                     Install-ModuleInPS5 @params
 
-                } else {
-                    Write-EnhancedModuleStarterLog -Message "NuGet provider is already installed." -Level "INFO"
-                }
+                # } else {
+                #     Write-EnhancedModuleStarterLog -Message "NuGet provider is already installed." -Level "INFO"
+                # }
             }
             else {
                 Write-EnhancedModuleStarterLog -Message "This script is running in PowerShell version $($PSVersionTable.PSVersion), which is not version 5. No action is taken for NuGet." -Level "INFO"
