@@ -180,6 +180,7 @@ function Log-Params {
         catch {
             Write-EnhancedModuleStarterLog -Message "An error occurred while logging parameters in $parentFunctionName $($_.Exception.Message)" -Level "ERROR"
             Handle-Error -ErrorRecord $_
+            throw
         }
     }
 
@@ -293,9 +294,36 @@ function Remove-OldVersions {
 
     process {
         # Get all versions except the latest one
+        # $allVersions = Get-Module -ListAvailable -Name $ModuleName | Sort-Object Version
+        # $latestVersion = $allVersions | Select-Object -Last 1
+        # $olderVersions = $allVersions | Where-Object { $_.Version -ne $latestVersion.Version }
+
+
+        # Retrieve all versions of the module
+        Write-EnhancedModuleStarterLog -Message "Retrieving all available versions of module: $ModuleName" -Level "INFO"
         $allVersions = Get-Module -ListAvailable -Name $ModuleName | Sort-Object Version
+
+        if ($allVersions -and $allVersions.Count -gt 0) {
+            Write-EnhancedModuleStarterLog -Message "Found $($allVersions.Count) versions of the module: $ModuleName" -Level "INFO"
+        }
+        else {
+            Write-EnhancedModuleStarterLog -Message "No versions of the module: $ModuleName were found." -Level "ERROR"
+            return
+        }
+
+        # Identify the latest version
         $latestVersion = $allVersions | Select-Object -Last 1
+        Write-EnhancedModuleStarterLog -Message "Latest version of the module: $ModuleName is $($latestVersion.Version)" -Level "INFO"
+
+        # Identify the older versions
         $olderVersions = $allVersions | Where-Object { $_.Version -ne $latestVersion.Version }
+        if ($olderVersions.Count -gt 0) {
+            Write-EnhancedModuleStarterLog -Message "Found $($olderVersions.Count) older versions of the module: $ModuleName" -Level "INFO"
+        }
+        else {
+            Write-EnhancedModuleStarterLog -Message "No older versions of the module: $ModuleName found." -Level "INFO"
+        }
+
 
         foreach ($version in $olderVersions) {
             try {
