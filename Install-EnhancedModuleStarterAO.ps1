@@ -491,6 +491,8 @@ function Ensure-NuGetProvider {
 
     Begin {
         Write-EnhancedModuleStarterLog -Message "Starting Ensure-NuGetProvider function" -Level "Notice"
+
+        Reset-ModulePaths
         
         # Log the current PowerShell version
         Write-EnhancedModuleStarterLog -Message "Running PowerShell version: $($PSVersionTable.PSVersion)" -Level "INFO"
@@ -690,6 +692,8 @@ function Update-ModuleIfOldOrMissing {
         Write-EnhancedModuleStarterLog -Message "Starting Update-ModuleIfOldOrMissing function for module: $ModuleName" -Level "Notice"
         Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
 
+        Reset-ModulePaths
+
         Ensure-NuGetProvider
     }
 
@@ -751,6 +755,8 @@ function Update-ModuleIfOldOrMissing {
         Write-EnhancedModuleStarterLog -Message "Update-ModuleIfOldOrMissing function execution completed for module: $ModuleName" -Level "Notice"
     }
 }
+
+
 
 
 Update-ModuleIfOldOrMissing -ModuleName 'PSFramework'
