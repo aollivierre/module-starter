@@ -119,7 +119,9 @@ if (-not $MyInvocation.MyCommand.Path) {
 
 else {
     # If running in a regular context, use the actual path of the script
+    Write-Host "Not Running as web script, executing locally..."
     $ScriptToRunAsSystem = $MyInvocation.MyCommand.Path
+    Write-Host "Scriipt path is $ScriptToRunAsSystem"
 }
 
 
