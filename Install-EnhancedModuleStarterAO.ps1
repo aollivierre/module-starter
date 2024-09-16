@@ -139,6 +139,8 @@ function Relaunch-InPowerShell5 {
         # Get the script path (works inside a function as well)
         $scriptPath = $PSCommandPath
 
+        Write-Host "Script path to Launch in PowerShell 5 is "$scriptPath""
+
         # $scriptPath = $MyInvocation.MyCommand.Definition
         $ps5Path = "$($env:SystemRoot)\System32\WindowsPowerShell\v1.0\powershell.exe"
 
