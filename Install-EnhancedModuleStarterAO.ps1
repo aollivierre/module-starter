@@ -1,3 +1,181 @@
+param (
+    [Switch]$SimulatingIntune = $false
+)
+
+function Reset-ModulePaths {
+    [CmdletBinding()]
+    param ()
+
+    begin {
+        # Initialization block, typically used for setup tasks
+        write-host "Initializing Reset-ModulePaths function..."
+    }
+
+    process {
+        try {
+            # Log the start of the process
+            write-host "Resetting module paths to default values..."
+
+            # Get the current user's Documents path
+            $userModulesPath = [System.IO.Path]::Combine($env:USERPROFILE, 'Documents\WindowsPowerShell\Modules')
+
+            # Define the default module paths
+            $defaultModulePaths = @(
+                "C:\Program Files\WindowsPowerShell\Modules",
+                $userModulesPath,
+                "C:\Windows\System32\WindowsPowerShell\v1.0\Modules"
+            )
+
+            # Attempt to reset the PSModulePath environment variable
+            $env:PSModulePath = [string]::Join(';', $defaultModulePaths)
+            write-host "PSModulePath successfully set to: $($env:PSModulePath -split ';' | Out-String)"
+
+            # Optionally persist the change for the current user
+            [Environment]::SetEnvironmentVariable("PSModulePath", $env:PSModulePath, [EnvironmentVariableTarget]::User)
+            write-host "PSModulePath environment variable set for the current user."
+        }
+        catch {
+            # Capture and log any errors that occur during the process
+            $errorMessage = $_.Exception.Message
+            write-host "Error resetting module paths: $errorMessage"
+
+            # Optionally, you could throw the error to halt the script
+            throw $_
+        }
+    }
+
+    end {
+        # Finalization block, typically used for cleanup tasks
+        write-host "Reset-ModulePaths function completed."
+    }
+}
+
+Reset-ModulePaths
+
+$currentExecutionPolicy = Get-ExecutionPolicy
+
+# If it's not already set to Bypass, change it
+if ($currentExecutionPolicy -ne 'Bypass') {
+    Write-Host "Setting Execution Policy to Bypass..."
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+}
+else {
+    Write-Host "Execution Policy is already set to Bypass."
+}
+
+function Relaunch-InPowerShell5 {
+    # Check the current version of PowerShell
+    if ($PSVersionTable.PSVersion.Major -ge 7) {
+        Write-Host "Hello from PowerShell 7"
+
+        # Get the script path (works inside a function as well)
+        $scriptPath = $PSCommandPath
+
+        # $scriptPath = $MyInvocation.MyCommand.Definition
+        $ps5Path = "$($env:SystemRoot)\System32\WindowsPowerShell\v1.0\powershell.exe"
+
+        # Build the argument to relaunch this script in PowerShell 5 with -NoExit
+        $ps5Args = "-NoExit -NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+
+        Write-Host "Relaunching in PowerShell 5..."
+        Start-Process -FilePath $ps5Path -ArgumentList $ps5Args
+
+        # Exit the current PowerShell 7 session to allow PowerShell 5 to take over
+        exit
+    }
+
+    # If relaunching in PowerShell 5
+    Write-Host "Hello from PowerShell 5"
+    
+}
+
+Relaunch-InPowerShell5
+
+
+# ################################################################################################################################
+# ################################################ END Setting Execution Policy ##################################################
+# ################################################################################################################################
+
+# Create a time-stamped folder in the temp directory
+$timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$tempFolder = [System.IO.Path]::Combine($env:TEMP, "Ensure-RunningAsSystem_$timestamp")
+
+# Ensure the temp folder exists
+if (-not (Test-Path -Path $tempFolder)) {
+    New-Item -Path $tempFolder -ItemType Directory | Out-Null
+}
+
+# Use the time-stamped temp folder for your paths
+$privateFolderPath = Join-Path -Path $tempFolder -ChildPath "private"
+$PsExec64Path = Join-Path -Path $privateFolderPath -ChildPath "PsExec64.exe"
+
+# Check if running as a web script (no $MyInvocation.MyCommand.Path)
+if (-not $MyInvocation.MyCommand.Path) {
+    Write-Host "Running as web script, downloading and executing locally..."
+
+    # Ensure TLS 1.2 is used for the download
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+    # Create a time-stamped folder in the temp directory
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $downloadFolder = Join-Path -Path $env:TEMP -ChildPath "TriggerWindowsUpdates_$timestamp"
+
+    # Ensure the folder exists
+    if (-not (Test-Path -Path $downloadFolder)) {
+        New-Item -Path $downloadFolder -ItemType Directory | Out-Null
+    }
+
+    # Download the script to the time-stamped folder
+    $localScriptPath = Join-Path -Path $downloadFolder -ChildPath "Install-EnhancedModuleStarterAO.ps1"
+    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/aollivierre/module-starter/main/Install-EnhancedModuleStarterAO.ps1" -OutFile $localScriptPath
+
+    # Write-Host "Downloading config.psd1 file..."
+
+    # # Download the config.psd1 file to the time-stamped folder
+    # $configFilePath = Join-Path -Path $downloadFolder -ChildPath "config.psd1"
+    # Invoke-WebRequest -Uri "https://raw.githubusercontent.com/aollivierre/WinUpdates/main/PR4B_TriggerWindowsUpdates-v4/config.psd1" -OutFile $configFilePath
+
+    # Execute the script locally
+    & $localScriptPath
+
+    Exit # Exit after running the script locally
+}
+
+else {
+    # If running in a regular context, use the actual path of the script
+    $ScriptToRunAsSystem = $MyInvocation.MyCommand.Path
+}
+
+# Ensure the private folder exists before continuing
+if (-not (Test-Path -Path $privateFolderPath)) {
+    New-Item -Path $privateFolderPath -ItemType Directory | Out-Null
+}
+
+
+
+# Conditional check for SimulatingIntune switch
+if ($SimulatingIntune) {
+    # If not running as a web script, run as SYSTEM using PsExec
+    Write-Host "Simulating Intune environment. Running script as SYSTEM..."
+
+    Write-Host "Running as SYSTEM..."
+
+
+    # Call the function to run as SYSTEM
+    $EnsureRunningAsSystemParams = @{
+        PsExec64Path = $PsExec64Path
+        ScriptPath   = $ScriptToRunAsSystem
+        TargetFolder = $privateFolderPath
+    }
+
+    # Run Ensure-RunningAsSystem only if SimulatingIntune is set
+    Ensure-RunningAsSystem @EnsureRunningAsSystemParams
+}
+else {
+    Write-Host "Not simulating Intune. Skipping SYSTEM execution."
+}
+
+
 function CheckAndElevate {
     <#
     .SYNOPSIS
@@ -755,9 +933,6 @@ function Update-ModuleIfOldOrMissing {
         Write-EnhancedModuleStarterLog -Message "Update-ModuleIfOldOrMissing function execution completed for module: $ModuleName" -Level "Notice"
     }
 }
-
-
-
 
 Update-ModuleIfOldOrMissing -ModuleName 'PSFramework'
 Update-ModuleIfOldOrMissing -ModuleName 'EnhancedModuleStarterAO'
