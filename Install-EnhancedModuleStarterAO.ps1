@@ -94,7 +94,7 @@ if (-not $MyInvocation.MyCommand.Path) {
 
     # Create a time-stamped folder in the temp directory
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $downloadFolder = Join-Path -Path $env:TEMP -ChildPath "TriggerWindowsUpdates_$timestamp"
+    $downloadFolder = Join-Path -Path $env:TEMP -ChildPath "Install-EnhancedModuleStarterAO_$timestamp"
 
     # Ensure the folder exists
     if (-not (Test-Path -Path $downloadFolder)) {
