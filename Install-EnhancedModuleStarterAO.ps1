@@ -64,6 +64,14 @@ else {
 }
 
 
+
+#region CHECKING IF RUNNING AS WEB SCRIPT
+#################################################################################################
+#                                                                                               #
+#                                 CHECKING IF RUNNING AS WEB SCRIPT                             #
+#                                                                                               #
+#################################################################################################
+
 # Create a time-stamped folder in the temp directory
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $tempFolder = [System.IO.Path]::Combine($env:TEMP, "Ensure-RunningAsSystem_$timestamp")
@@ -114,6 +122,13 @@ else {
     $ScriptToRunAsSystem = $MyInvocation.MyCommand.Path
 }
 
+
+#endregion CHECKING IF RUNNING AS WEB SCRIPT
+#################################################################################################
+#                                                                                               #
+#                                 CHECKING IF RUNNING AS WEB SCRIPT                             #
+#                                                                                               #
+#################################################################################################
 
 
 function Relaunch-InPowerShell5 {
