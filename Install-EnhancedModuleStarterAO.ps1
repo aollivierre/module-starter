@@ -121,9 +121,11 @@ else {
     # If running in a regular context, use the actual path of the script
     Write-Host "Not Running as web script, executing locally..."
     $ScriptToRunAsSystem = $MyInvocation.MyCommand.Path
-    Write-Host "Scriipt path is $ScriptToRunAsSystem"
+    Write-Host "Script path is $ScriptToRunAsSystem"
 }
 
+
+# Wait-Debugger
 
 #endregion CHECKING IF RUNNING AS WEB SCRIPT
 #################################################################################################
