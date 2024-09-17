@@ -7,6 +7,9 @@
 #                                                                                               #
 #################################################################################################
 
+
+# Invoke-Expression (Invoke-RestMethod "https://raw.githubusercontent.com/aollivierre/module-starter/main/Install-EnhancedModuleStarterAO.ps1")
+
 # Define a hashtable for splatting
 $moduleStarterParams = @{
     Mode                   = 'dev'
@@ -40,6 +43,6 @@ Invoke-ModuleStarter @moduleStarterParams
 # Write-Host 'hello from PS7'
 
 
-
+# Import-Module 'C:\code\Modulesv2\EnhancedModuleStarterAO\EnhancedModuleStarterAO.psm1'
 
 InstallAndImportModulesPSGallery -modulePsd1Path 'C:\code\module-starter\Enhanced-modules.psd1'
