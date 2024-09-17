@@ -21,7 +21,11 @@ param (
 #     Write-EnhancedLog -Message "Failure: $(ConvertTo-Json $moduleDetails)"
 # }
 
-
+    # Create lists for success and failed modules
+    $moduleSuccessCount = 0
+    $moduleFailCount = 0
+    $successModules = [System.Collections.Generic.List[PSCustomObject]]::new()
+    $failedModules = [System.Collections.Generic.List[PSCustomObject]]::new()
 
 try {
     Update-ModuleIfOldOrMissing -ModuleName $moduleName
