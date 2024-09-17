@@ -4,10 +4,10 @@ param (
 )
 
 # Initialize variables for success and failure tracking
-$moduleSuccessCount = 0
-$moduleFailCount = 0
-$successModules = [System.Collections.Generic.List[PSCustomObject]]::new()
-$failedModules = [System.Collections.Generic.List[PSCustomObject]]::new()
+# $moduleSuccessCount = 0
+# $moduleFailCount = 0
+# $successModules = [System.Collections.Generic.List[PSCustomObject]]::new()
+# $failedModules = [System.Collections.Generic.List[PSCustomObject]]::new()
 
 try {
     Update-ModuleIfOldOrMissing -ModuleName $ModuleName
