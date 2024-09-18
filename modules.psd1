@@ -14,7 +14,7 @@
         "PSFramework",
         "Pester",
         "PSReadLine",
-        "MSIdentitytools",
+        # "MSIdentitytools",
         "PSWindowsUpdate"
     )
     importedModules = @(
@@ -32,7 +32,7 @@
         "PSFramework",
         "Pester",
         "PSReadLine",
-        "MSIdentitytools",
+        # "MSIdentitytools",
         "PSWindowsUpdate"
     )
 }
