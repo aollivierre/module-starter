@@ -18,6 +18,7 @@ $moduleStarterParams = @{
     SkipPowerShell7Install = $true
     SkipEnhancedModules    = $true
     SkipGitRepos           = $true
+    ExecutionMode          = 'Parallel'
 }
 
 # Call the function using the splat
@@ -45,4 +46,4 @@ Invoke-ModuleStarter @moduleStarterParams
 
 # Import-Module 'C:\code\Modulesv2\EnhancedModuleStarterAO\EnhancedModuleStarterAO.psm1'
 
-InstallAndImportModulesPSGallery -modulePsd1Path 'C:\code\module-starter\Enhanced-modules.psd1'
+InstallAndImportModulesPSGallery -modulePsd1Path 'C:\code\module-starter\Enhanced-modules.psd1' -ExecutionMode 'parallel'
