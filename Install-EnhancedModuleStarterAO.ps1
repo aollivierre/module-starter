@@ -1,6 +1,13 @@
-param (
-    [Switch]$SimulatingIntune = $false
-)
+# param (
+#     [Switch]$SimulatingIntune = $false
+# )
+
+if (-not (Test-Path Variable:SimulatingIntune)) {
+    New-Variable -Name 'SimulatingIntune' -Value $false -Option None
+} else {
+    Set-Variable -Name 'SimulatingIntune' -Value $false
+}
+
 
 function Reset-ModulePaths {
     [CmdletBinding()]
