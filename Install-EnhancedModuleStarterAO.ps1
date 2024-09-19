@@ -966,7 +966,7 @@ function Update-ModuleIfOldOrMissing {
 
         Reset-ModulePaths
 
-        Ensure-NuGetProvider
+        # Ensure-NuGetProvider
     }
 
     process {
@@ -1028,9 +1028,7 @@ function Update-ModuleIfOldOrMissing {
     }
 }
 
-
+Ensure-NuGetProvider
 Remove-EnhancedModules
-
-
 Update-ModuleIfOldOrMissing -ModuleName 'PSFramework'
 Update-ModuleIfOldOrMissing -ModuleName 'EnhancedModuleStarterAO'
