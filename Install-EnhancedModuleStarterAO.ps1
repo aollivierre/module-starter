@@ -468,54 +468,6 @@ function Log-Params {
     }
 }
 
-# function Reset-ModulePaths {
-#     [CmdletBinding()]
-#     param ()
-
-#     begin {
-#         # Initialization block, typically used for setup tasks
-#         Write-EnhancedModuleStarterLog -Message "Initializing Reset-ModulePaths function..." -Level "DEBUG"
-#     }
-
-#     process {
-#         try {
-#             # Log the start of the process
-#             Write-EnhancedModuleStarterLog -Message "Resetting module paths to default values..." -Level "INFO"
-
-#             # Get the current user's Documents path
-#             $userModulesPath = [System.IO.Path]::Combine($env:USERPROFILE, 'Documents\WindowsPowerShell\Modules')
-
-#             # Define the default module paths
-#             $defaultModulePaths = @(
-#                 "C:\Program Files\WindowsPowerShell\Modules",
-#                 $userModulesPath,
-#                 "C:\Windows\System32\WindowsPowerShell\v1.0\Modules"
-#             )
-
-#             # Attempt to reset the PSModulePath environment variable
-#             $env:PSModulePath = [string]::Join(';', $defaultModulePaths)
-#             Write-EnhancedModuleStarterLog "PSModulePath successfully set to: $($env:PSModulePath -split ';' | Out-String)" -Level "INFO"
-
-#             # Optionally persist the change for the current user
-#             [Environment]::SetEnvironmentVariable("PSModulePath", $env:PSModulePath, [EnvironmentVariableTarget]::User)
-#             Write-EnhancedModuleStarterLog -Message "PSModulePath environment variable set for the current user." -Level "INFO"
-#         }
-#         catch {
-#             # Capture and log any errors that occur during the process
-#             $errorMessage = $_.Exception.Message
-#             Write-EnhancedModuleStarterLog -Message "Error resetting module paths: $errorMessage" -Level "ERROR"
-
-#             # Optionally, you could throw the error to halt the script
-#             throw $_
-#         }
-#     }
-
-#     end {
-#         # Finalization block, typically used for cleanup tasks
-#         Write-EnhancedModuleStarterLog -Message "Reset-ModulePaths function completed." -Level "DEBUG"
-#     }
-# }
-
 function Handle-Error {
     param (
         [Parameter(Mandatory = $true)]
@@ -540,6 +492,53 @@ function Handle-Error {
         Write-EnhancedModuleStarterLog -Message "Handler Full Exception: $($_ | Out-String)" -Level "CRITICAL"
     }
 }
+
+
+function Remove-EnhancedModules {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $false)]
+        [string]$ModuleNamePrefix = "Enhanced"
+    )
+
+    Begin {
+        Write-EnhancedModuleStarterLog -Message "Starting removal of modules with prefix '$ModuleNamePrefix'." -Level "NOTICE"
+    }
+
+    Process {
+        try {
+            # Get all installed modules that start with the specified prefix
+            $modules = Get-Module -ListAvailable | Where-Object { $_.Name -like "$ModuleNamePrefix*" }
+
+            if ($modules.Count -eq 0) {
+                Write-EnhancedModuleStarterLog -Message "No modules found with prefix '$ModuleNamePrefix'." -Level "INFO"
+                return
+            }
+
+            foreach ($module in $modules) {
+                Write-EnhancedModuleStarterLog -Message "Removing module '$($module.Name)' version '$($module.Version)'." -Level "INFO"
+
+                try {
+                    # Attempt to uninstall the module
+                    Uninstall-Module -Name $module.Name -AllVersions -Force -ErrorAction Stop
+                    Write-EnhancedModuleStarterLog -Message "Module '$($module.Name)' removed successfully." -Level "INFO"
+                }
+                catch {
+                    Write-EnhancedModuleStarterLog -Message "Failed to remove module '$($module.Name)': $_" -Level "ERROR"
+                }
+            }
+        }
+        catch {
+            Write-EnhancedModuleStarterLog -Message "Error during module removal process: $_" -Level "CRITICAL"
+            throw
+        }
+    }
+
+    End {
+        Write-EnhancedModuleStarterLog -Message "Completed removal of modules with prefix '$ModuleNamePrefix'." -Level "NOTICE"
+    }
+}
+
 
 function Remove-OldVersions {
     <#
@@ -822,6 +821,7 @@ function Ensure-NuGetProvider {
 }
 
 
+
 function Check-ModuleVersionStatus {
     <#
     .SYNOPSIS
@@ -934,13 +934,6 @@ function Check-ModuleVersionStatus {
     }
 }
 
-# Example usage:
-# $params = @{
-#     ModuleNames = @('Pester', 'AzureRM', 'PowerShellGet')
-# }
-# $versionStatuses = Check-ModuleVersionStatus @params
-# $versionStatuses | Format-Table -AutoSize
-
 
 function Update-ModuleIfOldOrMissing {
     <#
@@ -1034,6 +1027,10 @@ function Update-ModuleIfOldOrMissing {
         Write-EnhancedModuleStarterLog -Message "Update-ModuleIfOldOrMissing function execution completed for module: $ModuleName" -Level "Notice"
     }
 }
+
+
+Remove-EnhancedModules
+
 
 Update-ModuleIfOldOrMissing -ModuleName 'PSFramework'
 Update-ModuleIfOldOrMissing -ModuleName 'EnhancedModuleStarterAO'
