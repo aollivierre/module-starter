@@ -27,5 +27,6 @@
         # Other Utility Modules
         "MSAL.PS",                  # Microsoft Authentication Library
         "PSWindowsUpdate"           # Windows Update management
+        "PSADT"                     # PowerShell App Deployment Toolkit
     )
 }
