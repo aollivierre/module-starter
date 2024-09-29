@@ -4,7 +4,8 @@
 
 if (-not (Test-Path Variable:SimulatingIntune)) {
     New-Variable -Name 'SimulatingIntune' -Value $false -Option None
-} else {
+}
+else {
     Set-Variable -Name 'SimulatingIntune' -Value $false
 }
 
@@ -40,6 +41,8 @@ function Write-EnhancedModuleStarterLog {
     $logFilePath = [System.IO.Path]::Combine($env:TEMP, 'Module-Starter.log')
     $formattedMessage | Out-File -FilePath $logFilePath -Append -Encoding utf8
 }
+
+Write-EnhancedModuleStarterLog "Starting Install-EnhancedModuleStarterAO.ps1..." -Level 'WARNING'
 
 function Reset-ModulePaths {
     [CmdletBinding()]
@@ -284,15 +287,18 @@ function Get-PowerShellPath {
             if (Test-Path $pwsh7Path) {
                 Write-EnhancedModuleStarterLog -Message "PowerShell 7 found at $pwsh7Path" -Level "INFO"
                 return $pwsh7Path
-            } elseif (Test-Path $pwsh5Path) {
+            }
+            elseif (Test-Path $pwsh5Path) {
                 Write-EnhancedModuleStarterLog -Message "PowerShell 7 not found, falling back to PowerShell 5 at $pwsh5Path" -Level "WARNING"
                 return $pwsh5Path
             }
-        } else {
+        }
+        else {
             if (Test-Path $pwsh5Path) {
                 Write-EnhancedModuleStarterLog -Message "PowerShell 5 found at $pwsh5Path" -Level "INFO"
                 return $pwsh5Path
-            } elseif (Test-Path $pwsh7Path) {
+            }
+            elseif (Test-Path $pwsh7Path) {
                 Write-EnhancedModuleStarterLog -Message "PowerShell 5 not found, falling back to PowerShell 7 at $pwsh7Path" -Level "WARNING"
                 return $pwsh7Path
             }
@@ -307,8 +313,6 @@ function Get-PowerShellPath {
         Write-EnhancedModuleStarterLog -Message "Exiting Get-PowerShellPath function" -Level "NOTICE"
     }
 }
-
-
 
 function CheckAndElevate {
     <#
@@ -431,8 +435,6 @@ function Get-ParentScriptName {
     }
 }
 
-
-
 function Log-Params {
     <#
     .SYNOPSIS
@@ -495,8 +497,6 @@ function Handle-Error {
         Write-EnhancedModuleStarterLog -Message "Handler Full Exception: $($_ | Out-String)" -Level "CRITICAL"
     }
 }
-
-
 function Remove-EnhancedModules {
     [CmdletBinding()]
     param (
@@ -541,7 +541,6 @@ function Remove-EnhancedModules {
         Write-EnhancedModuleStarterLog -Message "Completed removal of modules with prefix '$ModuleNamePrefix'." -Level "NOTICE"
     }
 }
-
 
 function Remove-OldVersions {
     <#
@@ -632,7 +631,6 @@ function Remove-OldVersions {
         Write-EnhancedModuleStarterLog -Message "Remove-OldVersions function execution completed for module: $ModuleName" -Level "INFO"
     }
 }           
-
 
 function Install-ModuleInPS5 {
     <#
@@ -753,7 +751,6 @@ function Install-ModuleInPS5 {
     }
 }
 
-
 function Ensure-NuGetProvider {
     <#
     .SYNOPSIS
@@ -822,8 +819,6 @@ function Ensure-NuGetProvider {
         Write-EnhancedModuleStarterLog -Message "Exiting Ensure-NuGetProvider function" -Level "Notice"
     }
 }
-
-
 
 function Check-ModuleVersionStatus {
     <#
@@ -937,7 +932,6 @@ function Check-ModuleVersionStatus {
     }
 }
 
-
 function Update-ModuleIfOldOrMissing {
     <#
     .SYNOPSIS
@@ -1031,7 +1025,131 @@ function Update-ModuleIfOldOrMissing {
     }
 }
 
-Ensure-NuGetProvider
-Remove-EnhancedModules
-Update-ModuleIfOldOrMissing -ModuleName 'PSFramework'
-Update-ModuleIfOldOrMissing -ModuleName 'EnhancedModuleStarterAO'
+
+#region HANDLE PSF MODERN LOGGING
+#################################################################################################
+#                                                                                               #
+#                            HANDLE PSF MODERN LOGGING                                          #
+#                                                                                               #
+#################################################################################################
+# Set-PSFConfig -Fullname 'PSFramework.Logging.FileSystem.ModernLog' -Value $true -PassThru | Register-PSFConfig -Scope SystemDefault
+
+# Define the base logs path and job name
+$JobName = "Install-EnhancedModuleStarterAO"
+$parentScriptName = Get-ParentScriptName
+Write-EnhancedModuleStarterLog -Message "Parent Script Name: $parentScriptName"
+
+# Call the Get-PSFCSVLogFilePath function to generate the dynamic log file path
+$GetPSFCSVLogFilePathParam = @{
+    LogsPath         = 'C:\Logs\PSF'
+    JobName          = $jobName
+    parentScriptName = $parentScriptName
+}
+
+$csvLogFilePath = Get-PSFCSVLogFilePath @GetPSFCSVLogFilePathParam
+Write-EnhancedModuleStarterLog -Message "Generated Log File Path: $csvLogFilePath"
+
+#region HANDLE Transript LOGGING
+#################################################################################################
+#                                                                                               #
+#                            HANDLE Transript LOGGING                                           #
+#                                                                                               #
+#################################################################################################
+# Start the script with error handling
+try {
+    # Generate the transcript file path
+    $GetTranscriptFilePathParams = @{
+        TranscriptsPath  = "C:\Logs\Transcript"
+        JobName          = $jobName
+        parentScriptName = $parentScriptName
+    }
+    $transcriptPath = Get-TranscriptFilePath @GetTranscriptFilePathParams
+    
+    # Start the transcript
+    Write-EnhancedModuleStarterLog -Message "Starting transcript at: $transcriptPath" -Level 'INFO'
+    Start-Transcript -Path $transcriptPath
+}
+catch {
+    Write-EnhancedModuleStarterLog -Message "An error occurred during script execution: $_" -Level 'ERROR'
+    if ($transcriptPath) {
+        Stop-Transcript
+        Write-EnhancedModuleStarterLog "Transcript stopped." -Level 'WARNING'
+        # Stop logging in the finally block
+
+    }
+    else {
+        Write-EnhancedModuleStarterLog "Transcript was not started due to an earlier error." -Level 'ERROR'
+    }
+
+    # Stop PSF Logging
+
+    # Ensure the log is written before proceeding
+    # Wait-PSFMessage
+
+    # Stop logging in the finally block by disabling the provider
+    # Set-PSFLoggingProvider -Name 'logfile' -InstanceName $instanceName -Enabled $false
+
+    Handle-Error -ErrorRecord $_
+    throw $_  # Re-throw the error after logging it
+} 
+#endregion HANDLE Transript LOGGING
+
+# $DBG
+
+try {
+
+
+    #region Script Logic
+    #################################################################################################
+    #                                                                                               #
+    #                                    Script Logic                                               #
+    #                                                                                               #
+    #################################################################################################
+
+    Ensure-NuGetProvider
+    Remove-EnhancedModules
+    Update-ModuleIfOldOrMissing -ModuleName 'PSFramework'
+    Update-ModuleIfOldOrMissing -ModuleName 'EnhancedModuleStarterAO'
+
+
+    Write-EnhancedModuleStarterLog "Exiting Install-EnhancedModuleStarterAO.ps1..." -Level 'WARNING'
+
+    #endregion
+}
+catch {
+    Write-EnhancedModuleStarterLog -Message "An error occurred during script execution: $_" -Level 'ERROR'
+    if ($transcriptPath) {
+        Stop-Transcript
+        Write-EnhancedModuleStarterLog "Transcript stopped." -Level 'WARNING'
+        # Stop logging in the finally block
+    }
+
+    # Stop PSF Logging
+
+    # Ensure the log is written before proceeding
+    # Wait-PSFMessage
+
+    # Stop logging in the finally block by disabling the provider
+    # Set-PSFLoggingProvider -Name 'logfile' -InstanceName $instanceName -Enabled $false
+
+    Handle-Error -ErrorRecord $_
+    throw $_  # Re-throw the error after logging it
+} 
+finally {
+    # Ensure that the transcript is stopped even if an error occurs
+    if ($transcriptPath) {
+        Stop-Transcript
+        Write-EnhancedModuleStarterLog "Transcript stopped." -Level 'WARNING'
+        # Stop logging in the finally block
+
+    }
+    else {
+        Write-EnhancedModuleStarterLog "Transcript was not started due to an earlier error." -Level 'ERROR'
+    }
+    
+    # Ensure the log is written before proceeding
+    # Wait-PSFMessage
+
+    # Stop logging in the finally block by disabling the provider
+    # Set-PSFLoggingProvider -Name 'logfile' -InstanceName $instanceName -Enabled $false
+}
