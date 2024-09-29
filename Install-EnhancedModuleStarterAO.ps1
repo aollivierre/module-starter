@@ -146,6 +146,7 @@ else {
 #                                                                                               #
 #################################################################################################
 
+
 # Create a time-stamped folder in the temp directory
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $tempFolder = [System.IO.Path]::Combine($env:TEMP, "Ensure-RunningAsSystem_$timestamp")
@@ -155,49 +156,116 @@ if (-not (Test-Path -Path $tempFolder)) {
     New-Item -Path $tempFolder -ItemType Directory | Out-Null
 }
 
+
 # Use the time-stamped temp folder for your paths
 $privateFolderPath = Join-Path -Path $tempFolder -ChildPath "private"
 $PsExec64Path = Join-Path -Path $privateFolderPath -ChildPath "PsExec64.exe"
 
-# Check if running as a web script (no $MyInvocation.MyCommand.Path)
-if (-not $MyInvocation.MyCommand.Path) {
-    Write-EnhancedModuleStarterLog "Running as web script, downloading and executing locally..." -Level 'WARNING'
+function Get-LocalScriptPath {
+    param (
+        [string]$ScriptUri = "https://raw.githubusercontent.com/aollivierre/module-starter/main/Install-EnhancedModuleStarterAO.ps1"
+    )
 
-    # Ensure TLS 1.2 is used for the download
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    # Check if running as a web script (no $MyInvocation.MyCommand.Path)
+    if (-not $MyInvocation.MyCommand.Path) {
+        Write-EnhancedModuleStarterLog "Running as web script, downloading and executing locally..." -Level 'WARNING'
 
-    # Create a time-stamped folder in the temp directory
-    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $downloadFolder = Join-Path -Path $env:TEMP -ChildPath "Install-EnhancedModuleStarterAO_$timestamp"
+        # Ensure TLS 1.2 is used for the download
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-    # Ensure the folder exists
-    if (-not (Test-Path -Path $downloadFolder)) {
-        New-Item -Path $downloadFolder -ItemType Directory | Out-Null
+        # Create a time-stamped folder in the temp directory
+        $downloadFolder = Join-Path -Path $env:TEMP -ChildPath "Install-EnhancedModuleStarterAO_$timestamp"
+
+        # Ensure the folder exists
+        if (-not (Test-Path -Path $downloadFolder)) {
+            New-Item -Path $downloadFolder -ItemType Directory | Out-Null
+        }
+
+        # Download the script to the time-stamped folder
+        $localScriptPath = Join-Path -Path $downloadFolder -ChildPath "Install-EnhancedModuleStarterAO.ps1"
+        Invoke-WebRequest -Uri $ScriptUri -OutFile $localScriptPath
+
+        # Return the local script path as an object
+        return [pscustomobject]@{
+            Path   = $localScriptPath
+            Source = "Downloaded"
+        }
     }
+    else {
+        # If running in a regular context, use the actual path of the script
+        Write-EnhancedModuleStarterLog "Not Running as web script, executing locally..."
+        $ScriptToRunAsSystem = $MyInvocation.MyCommand.Path
+        Write-EnhancedModuleStarterLog "Script path is $ScriptToRunAsSystem"
 
-    # Download the script to the time-stamped folder
-    $localScriptPath = Join-Path -Path $downloadFolder -ChildPath "Install-EnhancedModuleStarterAO.ps1"
-    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/aollivierre/module-starter/main/Install-EnhancedModuleStarterAO.ps1" -OutFile $localScriptPath
-
-    # Write-EnhancedModuleStarterLog "Downloading config.psd1 file..."
-
-    # # Download the config.psd1 file to the time-stamped folder
-    # $configFilePath = Join-Path -Path $downloadFolder -ChildPath "config.psd1"
-    # Invoke-WebRequest -Uri "https://raw.githubusercontent.com/aollivierre/WinUpdates/main/PR4B_TriggerWindowsUpdates-v4/config.psd1" -OutFile $configFilePath
-
-    # Execute the script locally
-    & $localScriptPath
-
-    Write-EnhancedModuleStarterLog "Exiting Web Script"
-    Exit # Exit after running the script locally
+        # Return the local script path as an object
+        return [pscustomobject]@{
+            Path   = $ScriptToRunAsSystem
+            Source = "Local"
+        }
+    }
 }
 
-else {
-    # If running in a regular context, use the actual path of the script
-    Write-EnhancedModuleStarterLog "Not Running as web script, executing locally..."
-    $ScriptToRunAsSystem = $MyInvocation.MyCommand.Path
-    Write-EnhancedModuleStarterLog "Script path is $ScriptToRunAsSystem"
-}
+# Example usage:
+# $scriptObject = Get-LocalScriptPath
+# $scriptObject.Path | Relaunch-InPowerShell5
+
+
+
+
+
+
+# # Create a time-stamped folder in the temp directory
+# $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+# $tempFolder = [System.IO.Path]::Combine($env:TEMP, "Ensure-RunningAsSystem_$timestamp")
+
+# # Ensure the temp folder exists
+# if (-not (Test-Path -Path $tempFolder)) {
+#     New-Item -Path $tempFolder -ItemType Directory | Out-Null
+# }
+
+# # Use the time-stamped temp folder for your paths
+# $privateFolderPath = Join-Path -Path $tempFolder -ChildPath "private"
+# $PsExec64Path = Join-Path -Path $privateFolderPath -ChildPath "PsExec64.exe"
+
+# # Check if running as a web script (no $MyInvocation.MyCommand.Path)
+# if (-not $MyInvocation.MyCommand.Path) {
+#     Write-EnhancedModuleStarterLog "Running as web script, downloading and executing locally..." -Level 'WARNING'
+
+#     # Ensure TLS 1.2 is used for the download
+#     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+#     # Create a time-stamped folder in the temp directory
+#     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+#     $downloadFolder = Join-Path -Path $env:TEMP -ChildPath "Install-EnhancedModuleStarterAO_$timestamp"
+
+#     # Ensure the folder exists
+#     if (-not (Test-Path -Path $downloadFolder)) {
+#         New-Item -Path $downloadFolder -ItemType Directory | Out-Null
+#     }
+
+#     # Download the script to the time-stamped folder
+#     $localScriptPath = Join-Path -Path $downloadFolder -ChildPath "Install-EnhancedModuleStarterAO.ps1"
+#     Invoke-WebRequest -Uri "https://raw.githubusercontent.com/aollivierre/module-starter/main/Install-EnhancedModuleStarterAO.ps1" -OutFile $localScriptPath
+
+#     # Write-EnhancedModuleStarterLog "Downloading config.psd1 file..."
+
+#     # # Download the config.psd1 file to the time-stamped folder
+#     # $configFilePath = Join-Path -Path $downloadFolder -ChildPath "config.psd1"
+#     # Invoke-WebRequest -Uri "https://raw.githubusercontent.com/aollivierre/WinUpdates/main/PR4B_TriggerWindowsUpdates-v4/config.psd1" -OutFile $configFilePath
+
+#     # Execute the script locally
+#     & $localScriptPath
+
+#     Write-EnhancedModuleStarterLog "Exiting Web Script"
+#     Exit # Exit after running the script locally
+# }
+
+# else {
+#     # If running in a regular context, use the actual path of the script
+#     Write-EnhancedModuleStarterLog "Not Running as web script, executing locally..."
+#     $ScriptToRunAsSystem = $MyInvocation.MyCommand.Path
+#     Write-EnhancedModuleStarterLog "Script path is $ScriptToRunAsSystem"
+# }
 
 
 # Wait-Debugger
@@ -210,36 +278,80 @@ else {
 #################################################################################################
 
 
+
+
 function Relaunch-InPowerShell5 {
-    # Check the current version of PowerShell
-    if ($PSVersionTable.PSVersion.Major -ge 7) {
-        Write-EnhancedModuleStarterLog "Hello from PowerShell 7"
+    param (
+        [string]$ScriptPath
+    )
 
-        # Get the script path (works inside a function as well)
-        # $scriptPath = $PSCommandPath
-        $scriptPath = $MyInvocation.MyCommand.Path
+    process {
+        # Default to $PSCommandPath or fallback to the provided path
+        $scriptPath = if ($PSCommandPath) { $PSCommandPath } else { $ScriptPath }
 
-        Write-EnhancedModuleStarterLog "Script path to Launch in PowerShell 5 is "$scriptPath""
+        if (-not $scriptPath) {
+            Write-EnhancedModuleStarterLog "Script path not found, attempting to get it via Get-LocalScriptPath..." -Level 'WARNING'
+            $scriptPath = Get-LocalScriptPath
+        }
 
-        # $scriptPath = $MyInvocation.MyCommand.Definition
-        $ps5Path = "$($env:SystemRoot)\System32\WindowsPowerShell\v1.0\powershell.exe"
+        Write-EnhancedModuleStarterLog "Script path to Launch in PowerShell 5 is '$scriptPath'"
 
-        # Build the argument to relaunch this script in PowerShell 5 with -NoExit
-        $ps5Args = "-NoExit -NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+        # Check the current version of PowerShell
+        if ($PSVersionTable.PSVersion.Major -ge 7) {
+            Write-EnhancedModuleStarterLog "Hello from PowerShell 7"
 
-        Write-EnhancedModuleStarterLog "Relaunching in PowerShell 5..."
-        Start-Process -FilePath $ps5Path -ArgumentList $ps5Args
+            $ps5Path = "$($env:SystemRoot)\System32\WindowsPowerShell\v1.0\powershell.exe"
 
-        # Exit the current PowerShell 7 session to allow PowerShell 5 to take over
-        exit
+            # Build the argument to relaunch this script in PowerShell 5 with -NoExit
+            $ps5Args = "-NoExit -NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+
+            Write-EnhancedModuleStarterLog "Relaunching in PowerShell 5..."
+            Start-Process -FilePath $ps5Path -ArgumentList $ps5Args
+
+            # Exit the current PowerShell 7 session to allow PowerShell 5 to take over
+            exit
+        }
+
+        # If relaunching in PowerShell 5
+        Write-EnhancedModuleStarterLog "Hello from PowerShell 5"
     }
-
-    # If relaunching in PowerShell 5
-    Write-EnhancedModuleStarterLog "Hello from PowerShell 5"
-    
 }
 
-Relaunch-InPowerShell5
+# Example usage:
+# You can pipe the output of Get-LocalScriptPath to Relaunch-InPowerShell5
+Get-LocalScriptPath | Relaunch-InPowerShell5
+
+
+# function Relaunch-InPowerShell5 {
+#     # Check the current version of PowerShell
+#     if ($PSVersionTable.PSVersion.Major -ge 7) {
+#         Write-EnhancedModuleStarterLog "Hello from PowerShell 7"
+
+#         # Get the script path (works inside a function as well)
+#         # $scriptPath = $PSCommandPath
+#         $scriptPath = $MyInvocation.MyCommand.Path
+
+#         Write-EnhancedModuleStarterLog "Script path to Launch in PowerShell 5 is "$scriptPath""
+
+#         # $scriptPath = $MyInvocation.MyCommand.Definition
+#         $ps5Path = "$($env:SystemRoot)\System32\WindowsPowerShell\v1.0\powershell.exe"
+
+#         # Build the argument to relaunch this script in PowerShell 5 with -NoExit
+#         $ps5Args = "-NoExit -NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+
+#         Write-EnhancedModuleStarterLog "Relaunching in PowerShell 5..."
+#         Start-Process -FilePath $ps5Path -ArgumentList $ps5Args
+
+#         # Exit the current PowerShell 7 session to allow PowerShell 5 to take over
+#         exit
+#     }
+
+#     # If relaunching in PowerShell 5
+#     Write-EnhancedModuleStarterLog "Hello from PowerShell 5"
+    
+# }
+
+# Relaunch-InPowerShell5
 
 
 # ################################################################################################################################
@@ -435,6 +547,335 @@ function CheckAndElevate {
     }
 }
 
+function Test-RunningAsSystem {
+    <#
+    .SYNOPSIS
+    Checks if the current session is running under the SYSTEM account.
+
+    .DESCRIPTION
+    The Test-RunningAsSystem function checks whether the current PowerShell session is running under the Windows SYSTEM account. 
+    This is determined by comparing the security identifier (SID) of the current user with the SID of the SYSTEM account.
+
+    .EXAMPLE
+    $isSystem = Test-RunningAsSystem
+    if ($isSystem) {
+        Write-Host "The script is running under the SYSTEM account."
+    } else {
+        Write-Host "The script is not running under the SYSTEM account."
+    }
+
+    Checks if the current session is running under the SYSTEM account and returns the status.
+
+    .NOTES
+    This function is useful when determining if the script is being executed by a service or task running under the SYSTEM account.
+    #>
+
+    [CmdletBinding()]
+    param ()
+
+    Begin {
+        Write-EnhancedModuleStarterLog -Message "Starting Test-RunningAsSystem function" -Level "NOTICE"
+
+        # Initialize variables
+        $systemSid = [System.Security.Principal.SecurityIdentifier]::new("S-1-5-18")
+    }
+
+    Process {
+        try {
+            Write-EnhancedModuleStarterLog -Message "Checking if the script is running under the SYSTEM account..." -Level "INFO"
+
+            $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+
+            if ($currentSid -eq $systemSid) {
+                Write-EnhancedModuleStarterLog -Message "The script is running under the SYSTEM account." -Level "INFO"
+            }
+            else {
+                Write-EnhancedModuleStarterLog -Message "The script is not running under the SYSTEM account." -Level "WARNING"
+            }
+        }
+        catch {
+            Write-EnhancedModuleStarterLog -Message "Error determining if running as SYSTEM: $($_.Exception.Message)" -Level "ERROR"
+            Handle-Error -ErrorRecord $_
+            throw $_
+        }
+    }
+
+    End {
+        Write-EnhancedModuleStarterLog -Message "Exiting Test-RunningAsSystem function" -Level "NOTICE"
+        return $currentSid -eq $systemSid
+    }
+}
+
+
+function Sanitize-LogFilePath {
+    [CmdletBinding()]
+    param (
+        [string]$LogFilePath
+    )
+
+    try {
+        Write-EnhancedModuleStarterLog -Message "Starting Sanitize-LogFilePath function..." -Level "NOTICE"
+        Write-EnhancedModuleStarterLog -Message "Original LogFilePath: $LogFilePath" -Level "INFO"
+
+        # Trim leading and trailing whitespace
+        $LogFilePath = $LogFilePath.Trim()
+        Write-EnhancedModuleStarterLog -Message "LogFilePath after trim: $LogFilePath" -Level "INFO"
+
+        # Replace multiple spaces with a single space
+        $LogFilePath = $LogFilePath -replace '\s+', ' '
+        Write-EnhancedModuleStarterLog -Message "LogFilePath after removing multiple spaces: $LogFilePath" -Level "INFO"
+
+        # Replace illegal characters (preserve drive letter and colon)
+        if ($LogFilePath -match '^([a-zA-Z]):\\') {
+            $drive = $matches[1]
+            $LogFilePath = $LogFilePath -replace '[<>:"|?*]', '_'
+            $LogFilePath = "$drive`:$($LogFilePath.Substring(2))"
+        }
+        else {
+            # Handle cases where the path doesn't start with a drive letter
+            $LogFilePath = $LogFilePath -replace '[<>:"|?*]', '_'
+        }
+        Write-EnhancedModuleStarterLog -Message "LogFilePath after replacing invalid characters: $LogFilePath" -Level "INFO"
+
+        # Replace multiple backslashes with a single backslash
+        $LogFilePath = [System.Text.RegularExpressions.Regex]::Replace($LogFilePath, '\\+', '\')
+        Write-EnhancedModuleStarterLog -Message "LogFilePath after replacing multiple slashes: $LogFilePath" -Level "INFO"
+
+        # Ensure the path is still rooted
+        if (-not [System.IO.Path]::IsPathRooted($LogFilePath)) {
+            throw "The LogFilePath is not rooted: $LogFilePath"
+        }
+
+        Write-EnhancedModuleStarterLog -Message "Sanitized LogFilePath: $LogFilePath" -Level "INFO"
+        Write-EnhancedModuleStarterLog -Message "Exiting Sanitize-LogFilePath function" -Level "NOTICE"
+        return $LogFilePath
+    }
+    catch {
+        Write-EnhancedModuleStarterLog -Message "An error occurred in Sanitize-LogFilePath: $_" -Level "ERROR"
+        Handle-Error -ErrorRecord $_
+        throw $_  # Re-throw the error after logging it
+    }
+}
+function Validate-LogFilePath {
+    [CmdletBinding()]
+    param (
+        [string]$LogFilePath
+    )
+
+    try {
+        Write-EnhancedModuleStarterLog -Message "Starting Validate-LogFilePath function..." -Level "NOTICE"
+        Write-EnhancedModuleStarterLog -Message "Validating LogFilePath: $LogFilePath" -Level "INFO"
+
+        # Check for invalid characters in the file path
+        if ($LogFilePath -match "[<>""|?*]") {
+            Write-EnhancedModuleStarterLog -Message "Warning: The LogFilePath contains invalid characters." -Level "WARNING"
+        }
+
+        # Check for double backslashes which may indicate an error in path generation
+        if ($LogFilePath -match "\\\\") {
+            Write-EnhancedModuleStarterLog -Message "Warning: The LogFilePath contains double backslashes." -Level "WARNING"
+        }
+
+        Write-EnhancedModuleStarterLog -Message "Validation complete for LogFilePath: $LogFilePath" -Level "INFO"
+        Write-EnhancedModuleStarterLog -Message "Exiting Validate-LogFilePath function" -Level "NOTICE"
+    }
+    catch {
+        Write-EnhancedModuleStarterLog -Message "An error occurred in Validate-LogFilePath: $_" -Level "ERROR"
+        Handle-Error -ErrorRecord $_
+        throw $_  # Re-throw the error after logging it
+    }
+}
+
+function Get-PSFCSVLogFilePath {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true, Position = 0, HelpMessage = "Specify the base path where the logs will be stored.")]
+        [string]$LogsPath,
+
+        [Parameter(Mandatory = $true, Position = 1, HelpMessage = "Specify the job name to be used in the log file name.")]
+        [string]$JobName,
+
+        [Parameter(Mandatory = $true, Position = 2, HelpMessage = "Specify the name of the parent script.")]
+        [string]$parentScriptName
+    )
+
+    Begin {
+        Write-EnhancedModuleStarterLog -Message "Starting Get-PSFCSVLogFilePath function..." -Level "NOTICE"
+        Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
+
+        # Ensure the destination directory exists
+        if (-not (Test-Path -Path $LogsPath)) {
+            New-Item -ItemType Directory -Path $LogsPath -Force | Out-Null
+            Write-EnhancedModuleStarterLog -Message "Created Logs directory at: $LogsPath" -Level "INFO"
+        }
+    }
+
+    Process {
+        try {
+            # Get the current username
+            $username = if ($env:USERNAME) { $env:USERNAME } else { "UnknownUser" }
+            Write-EnhancedModuleStarterLog -Message "Current username: $username" -Level "INFO"
+
+            # Log the parent script name
+            Write-EnhancedModuleStarterLog -Message "Script name: $parentScriptName" -Level "INFO"
+
+            # Check if running as SYSTEM
+            $isSystem = Test-RunningAsSystem
+            Write-EnhancedModuleStarterLog -Message "Is running as SYSTEM: $isSystem" -Level "INFO"
+
+            # Get the current date for folder creation
+            $currentDate = Get-Date -Format "yyyy-MM-dd"
+
+            # Construct the hostname and timestamp for the log filename
+            $hostname = $env:COMPUTERNAME
+            $timestamp = Get-Date -Format "yyyy-MM-dd-HH-mm-ss"
+            $logFolderPath = "$LogsPath\$currentDate\$parentScriptName"
+
+            # Ensure the log directory exists
+            if (-not (Test-Path -Path $logFolderPath)) {
+                New-Item -Path $logFolderPath -ItemType Directory -Force | Out-Null
+                Write-EnhancedModuleStarterLog -Message "Created directory for log file: $logFolderPath" -Level "INFO"
+            }
+
+            # Generate log file path based on context
+            $logFilePath = if ($isSystem) {
+                "$logFolderPath\$hostname-$JobName-SYSTEM-$parentScriptName-log-$timestamp.csv"
+            }
+            else {
+                "$logFolderPath\$hostname-$JobName-$username-$parentScriptName-log-$timestamp.csv"
+            }
+
+            $logFilePath = Sanitize-LogFilePath -LogFilePath $logFilePath
+
+            # Validate the log file path before using it
+            Validate-LogFilePath -LogFilePath $logFilePath
+
+            Write-EnhancedModuleStarterLog -Message "Generated PSFramework CSV log file path: $logFilePath" -Level "INFO"
+            return $logFilePath
+        }
+        catch {
+            Write-EnhancedModuleStarterLog -Message "An error occurred in Get-PSFCSVLogFilePath: $_" -Level "ERROR"
+            Handle-Error -ErrorRecord $_
+            throw $_  # Re-throw the error after logging it
+        }
+    }
+
+    End {
+        Write-EnhancedModuleStarterLog -Message "Exiting Get-PSFCSVLogFilePath function" -Level "NOTICE"
+    }
+}
+
+function Get-TranscriptFilePath {
+    <#
+    .SYNOPSIS
+    Generates a file path for storing PowerShell transcripts.
+
+    .DESCRIPTION
+    The Get-TranscriptFilePath function constructs a unique transcript file path based on the provided transcript directory, job name, and parent script name. It ensures the transcript directory exists, handles context (e.g., SYSTEM account), and logs each step of the process.
+
+    .PARAMETER TranscriptsPath
+    The base directory where transcript files will be stored.
+
+    .PARAMETER JobName
+    The name of the job or task, used to distinguish different log files.
+
+    .PARAMETER ParentScriptName
+    The name of the parent script that is generating the transcript.
+
+    .EXAMPLE
+    $params = @{
+        TranscriptsPath  = 'C:\Transcripts'
+        JobName          = 'BackupJob'
+        ParentScriptName = 'BackupScript.ps1'
+    }
+    Get-TranscriptFilePath @params
+    Generates a transcript file path for a script called BackupScript.ps1.
+    #>
+
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true, HelpMessage = "Provide the base path for transcripts.")]
+        [ValidateNotNullOrEmpty()]
+        [string]$TranscriptsPath,
+
+        [Parameter(Mandatory = $true, HelpMessage = "Provide the job name.")]
+        [ValidateNotNullOrEmpty()]
+        [string]$JobName,
+
+        [Parameter(Mandatory = $true, HelpMessage = "Provide the parent script name.")]
+        [ValidateNotNullOrEmpty()]
+        [string]$ParentScriptName
+    )
+
+    Begin {
+        # Log the start of the function
+        Write-EnhancedModuleStarterLog -Message "Starting Get-TranscriptFilePath function..." -Level "NOTICE"
+        Log-Params -Params $PSCmdlet.MyInvocation.BoundParameters
+
+        # Ensure the destination directory exists
+        if (-not (Test-Path -Path $TranscriptsPath)) {
+            New-Item -ItemType Directory -Path $TranscriptsPath -Force | Out-Null
+            Write-EnhancedModuleStarterLog -Message "Created Transcripts directory at: $TranscriptsPath" -Level "INFO"
+        }
+    }
+
+    Process {
+        try {
+            # Get the current username or fallback to "UnknownUser"
+            $username = if ($env:USERNAME) { $env:USERNAME } else { "UnknownUser" }
+            Write-EnhancedModuleStarterLog -Message "Current username: $username" -Level "INFO"
+
+            # Log the provided parent script name
+            Write-EnhancedModuleStarterLog -Message "Parent script name: $ParentScriptName" -Level "INFO"
+
+            # Check if running as SYSTEM
+            $isSystem = Test-RunningAsSystem
+            Write-EnhancedModuleStarterLog -Message "Is running as SYSTEM: $isSystem" -Level "INFO"
+
+            # Get the current date for folder structure
+            $currentDate = Get-Date -Format "yyyy-MM-dd"
+            Write-EnhancedModuleStarterLog -Message "Current date for transcript folder: $currentDate" -Level "INFO"
+
+            # Construct the hostname and timestamp for the log file name
+            $hostname = $env:COMPUTERNAME
+            $timestamp = Get-Date -Format "yyyy-MM-dd-HH-mm-ss"
+            $logFolderPath = Join-Path -Path $TranscriptsPath -ChildPath "$currentDate\$ParentScriptName"
+
+            # Ensure the log directory exists
+            if (-not (Test-Path -Path $logFolderPath)) {
+                New-Item -Path $logFolderPath -ItemType Directory -Force | Out-Null
+                Write-EnhancedModuleStarterLog -Message "Created directory for transcript logs: $logFolderPath" -Level "INFO"
+            }
+
+            # Generate log file path based on context (SYSTEM or user)
+            $logFilePath = if ($isSystem) {
+                "$logFolderPath\$hostname-$JobName-SYSTEM-$ParentScriptName-transcript-$timestamp.log"
+            }
+            else {
+                "$logFolderPath\$hostname-$JobName-$username-$ParentScriptName-transcript-$timestamp.log"
+            }
+
+            Write-EnhancedModuleStarterLog -Message "Constructed log file path: $logFilePath" -Level "INFO"
+
+            # Sanitize and validate the log file path
+            $logFilePath = Sanitize-LogFilePath -LogFilePath $logFilePath
+            Validate-LogFilePath -LogFilePath $logFilePath
+            Write-EnhancedModuleStarterLog -Message "Log file path sanitized and validated: $logFilePath" -Level "INFO"
+
+            # Return the constructed file path
+            return $logFilePath
+        }
+        catch {
+            Write-EnhancedModuleStarterLog -Message "An error occurred in Get-TranscriptFilePath: $($_.Exception.Message)" -Level "ERROR"
+            Handle-Error -ErrorRecord $_
+            throw
+        }
+    }
+
+    End {
+        Write-EnhancedModuleStarterLog -Message "Exiting Get-TranscriptFilePath function" -Level "NOTICE"
+    }
+}
 
 
 function Log-Params {
@@ -1113,9 +1554,6 @@ try {
     Update-ModuleIfOldOrMissing -ModuleName 'PSFramework'
     Update-ModuleIfOldOrMissing -ModuleName 'EnhancedModuleStarterAO'
 
-
-    Write-EnhancedModuleStarterLog "Exiting Install-EnhancedModuleStarterAO.ps1..." -Level 'WARNING'
-
     #endregion
 }
 catch {
@@ -1154,4 +1592,6 @@ finally {
 
     # Stop logging in the finally block by disabling the provider
     # Set-PSFLoggingProvider -Name 'logfile' -InstanceName $instanceName -Enabled $false
+    Write-EnhancedModuleStarterLog "Exiting Install-EnhancedModuleStarterAO.ps1..." -Level 'WARNING'
 }
+Write-EnhancedModuleStarterLog "Exiting Install-EnhancedModuleStarterAO.ps1..." -Level 'WARNING'
