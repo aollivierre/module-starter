@@ -166,6 +166,15 @@ function Get-LocalScriptPath {
         [string]$ScriptUri = "https://raw.githubusercontent.com/aollivierre/module-starter/main/Install-EnhancedModuleStarterAO.ps1"
     )
 
+    # Create a time-stamped folder in the temp directory
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $tempFolder = [System.IO.Path]::Combine($env:TEMP, "Ensure-RunningAsSystem_$timestamp")
+
+    # Ensure the temp folder exists
+    if (-not (Test-Path -Path $tempFolder)) {
+        New-Item -Path $tempFolder -ItemType Directory | Out-Null
+    }
+
     # Check if running as a web script (no $MyInvocation.MyCommand.Path)
     if (-not $MyInvocation.MyCommand.Path) {
         Write-EnhancedModuleStarterLog "Running as web script, downloading and executing locally..." -Level 'WARNING'
@@ -185,25 +194,17 @@ function Get-LocalScriptPath {
         $localScriptPath = Join-Path -Path $downloadFolder -ChildPath "Install-EnhancedModuleStarterAO.ps1"
         Invoke-WebRequest -Uri $ScriptUri -OutFile $localScriptPath
 
-        # Return the local script path as an object
-        return [pscustomobject]@{
-            Path   = $localScriptPath
-            Source = "Downloaded"
-        }
-    }
-    else {
+        # Return the local script path
+        return $localScriptPath
+    } else {
         # If running in a regular context, use the actual path of the script
         Write-EnhancedModuleStarterLog "Not Running as web script, executing locally..."
-        $ScriptToRunAsSystem = $MyInvocation.MyCommand.Path
-        Write-EnhancedModuleStarterLog "Script path is $ScriptToRunAsSystem"
-
-        # Return the local script path as an object
-        return [pscustomobject]@{
-            Path   = $ScriptToRunAsSystem
-            Source = "Local"
-        }
+        return $MyInvocation.MyCommand.Path
     }
 }
+
+
+
 
 # Example usage:
 # $scriptObject = Get-LocalScriptPath
@@ -318,8 +319,9 @@ function Relaunch-InPowerShell5 {
 }
 
 # Example usage:
-# You can pipe the output of Get-LocalScriptPath to Relaunch-InPowerShell5
-Get-LocalScriptPath | Relaunch-InPowerShell5
+# Get the script path and pass it directly to Relaunch-InPowerShell5
+$scriptPath = Get-LocalScriptPath
+Relaunch-InPowerShell5 -ScriptPath $scriptPath
 
 
 # function Relaunch-InPowerShell5 {
