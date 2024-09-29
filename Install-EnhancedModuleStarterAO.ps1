@@ -9,19 +9,21 @@ if (-not (Test-Path Variable:SimulatingIntune)) {
 }
 
 
+
+
 function Reset-ModulePaths {
     [CmdletBinding()]
     param ()
 
     begin {
         # Initialization block, typically used for setup tasks
-        write-host "Initializing Reset-ModulePaths function..."
+        Write-EnhancedModuleStarterLog "Initializing Reset-ModulePaths function..."
     }
 
     process {
         try {
             # Log the start of the process
-            write-host "Resetting module paths to default values..."
+            Write-EnhancedModuleStarterLog "Resetting module paths to default values..."
 
             # Get the current user's Documents path
             $userModulesPath = [System.IO.Path]::Combine($env:USERPROFILE, 'Documents\WindowsPowerShell\Modules')
@@ -35,16 +37,16 @@ function Reset-ModulePaths {
 
             # Attempt to reset the PSModulePath environment variable
             $env:PSModulePath = [string]::Join(';', $defaultModulePaths)
-            write-host "PSModulePath successfully set to: $($env:PSModulePath -split ';' | Out-String)"
+            Write-EnhancedModuleStarterLog "PSModulePath successfully set to: $($env:PSModulePath -split ';' | Out-String)"
 
             # Optionally persist the change for the current user
             [Environment]::SetEnvironmentVariable("PSModulePath", $env:PSModulePath, [EnvironmentVariableTarget]::User)
-            write-host "PSModulePath environment variable set for the current user."
+            Write-EnhancedModuleStarterLog "PSModulePath environment variable set for the current user."
         }
         catch {
             # Capture and log any errors that occur during the process
             $errorMessage = $_.Exception.Message
-            write-host "Error resetting module paths: $errorMessage"
+            Write-EnhancedModuleStarterLog "Error resetting module paths: $errorMessage"
 
             # Optionally, you could throw the error to halt the script
             throw $_
@@ -53,7 +55,7 @@ function Reset-ModulePaths {
 
     end {
         # Finalization block, typically used for cleanup tasks
-        write-host "Reset-ModulePaths function completed."
+        Write-EnhancedModuleStarterLog "Reset-ModulePaths function completed."
     }
 }
 
@@ -63,11 +65,11 @@ $currentExecutionPolicy = Get-ExecutionPolicy
 
 # If it's not already set to Bypass, change it
 if ($currentExecutionPolicy -ne 'Bypass') {
-    Write-Host "Setting Execution Policy to Bypass..."
+    Write-EnhancedModuleStarterLog "Setting Execution Policy to Bypass..."
     Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 }
 else {
-    Write-Host "Execution Policy is already set to Bypass."
+    Write-EnhancedModuleStarterLog "Execution Policy is already set to Bypass."
 }
 
 
@@ -94,7 +96,7 @@ $PsExec64Path = Join-Path -Path $privateFolderPath -ChildPath "PsExec64.exe"
 
 # Check if running as a web script (no $MyInvocation.MyCommand.Path)
 if (-not $MyInvocation.MyCommand.Path) {
-    Write-Host "Running as web script, downloading and executing locally..."
+    Write-EnhancedModuleStarterLog "Running as web script, downloading and executing locally..."
 
     # Ensure TLS 1.2 is used for the download
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -112,7 +114,7 @@ if (-not $MyInvocation.MyCommand.Path) {
     $localScriptPath = Join-Path -Path $downloadFolder -ChildPath "Install-EnhancedModuleStarterAO.ps1"
     Invoke-WebRequest -Uri "https://raw.githubusercontent.com/aollivierre/module-starter/main/Install-EnhancedModuleStarterAO.ps1" -OutFile $localScriptPath
 
-    # Write-Host "Downloading config.psd1 file..."
+    # Write-EnhancedModuleStarterLog "Downloading config.psd1 file..."
 
     # # Download the config.psd1 file to the time-stamped folder
     # $configFilePath = Join-Path -Path $downloadFolder -ChildPath "config.psd1"
@@ -126,9 +128,9 @@ if (-not $MyInvocation.MyCommand.Path) {
 
 else {
     # If running in a regular context, use the actual path of the script
-    Write-Host "Not Running as web script, executing locally..."
+    Write-EnhancedModuleStarterLog "Not Running as web script, executing locally..."
     $ScriptToRunAsSystem = $MyInvocation.MyCommand.Path
-    Write-Host "Script path is $ScriptToRunAsSystem"
+    Write-EnhancedModuleStarterLog "Script path is $ScriptToRunAsSystem"
 }
 
 
@@ -145,12 +147,12 @@ else {
 function Relaunch-InPowerShell5 {
     # Check the current version of PowerShell
     if ($PSVersionTable.PSVersion.Major -ge 7) {
-        Write-Host "Hello from PowerShell 7"
+        Write-EnhancedModuleStarterLog "Hello from PowerShell 7"
 
         # Get the script path (works inside a function as well)
         $scriptPath = $PSCommandPath
 
-        Write-Host "Script path to Launch in PowerShell 5 is "$scriptPath""
+        Write-EnhancedModuleStarterLog "Script path to Launch in PowerShell 5 is "$scriptPath""
 
         # $scriptPath = $MyInvocation.MyCommand.Definition
         $ps5Path = "$($env:SystemRoot)\System32\WindowsPowerShell\v1.0\powershell.exe"
@@ -158,7 +160,7 @@ function Relaunch-InPowerShell5 {
         # Build the argument to relaunch this script in PowerShell 5 with -NoExit
         $ps5Args = "-NoExit -NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
 
-        Write-Host "Relaunching in PowerShell 5..."
+        Write-EnhancedModuleStarterLog "Relaunching in PowerShell 5..."
         Start-Process -FilePath $ps5Path -ArgumentList $ps5Args
 
         # Exit the current PowerShell 7 session to allow PowerShell 5 to take over
@@ -166,7 +168,7 @@ function Relaunch-InPowerShell5 {
     }
 
     # If relaunching in PowerShell 5
-    Write-Host "Hello from PowerShell 5"
+    Write-EnhancedModuleStarterLog "Hello from PowerShell 5"
     
 }
 
@@ -188,9 +190,9 @@ if (-not (Test-Path -Path $privateFolderPath)) {
 # Conditional check for SimulatingIntune switch
 if ($SimulatingIntune) {
     # If not running as a web script, run as SYSTEM using PsExec
-    Write-Host "Simulating Intune environment. Running script as SYSTEM..."
+    Write-EnhancedModuleStarterLog "Simulating Intune environment. Running script as SYSTEM..."
 
-    Write-Host "Running as SYSTEM..."
+    Write-EnhancedModuleStarterLog "Running as SYSTEM..."
 
 
     # Call the function to run as SYSTEM
@@ -204,7 +206,7 @@ if ($SimulatingIntune) {
     Ensure-RunningAsSystem @EnsureRunningAsSystemParams
 }
 else {
-    Write-Host "Not simulating Intune. Skipping SYSTEM execution."
+    Write-EnhancedModuleStarterLog "Not simulating Intune. Skipping SYSTEM execution."
 }
 
 
@@ -223,11 +225,11 @@ function Get-PowerShellPath {
 
     .EXAMPLE
         $pwshPath = Get-PowerShellPath
-        Write-Host "PowerShell found at: $pwshPath"
+        Write-EnhancedModuleStarterLog "PowerShell found at: $pwshPath"
 
     .EXAMPLE
         $pwshPath = Get-PowerShellPath -UsePS7
-        Write-Host "PowerShell found at: $pwshPath"
+        Write-EnhancedModuleStarterLog "PowerShell found at: $pwshPath"
 
     .NOTES
         Author: Abdullah Ollivierre
@@ -298,7 +300,7 @@ function CheckAndElevate {
     .EXAMPLE
     $isAdmin = CheckAndElevate -ElevateIfNotAdmin $false
     if (-not $isAdmin) {
-        Write-Host "The script is not running with administrative privileges."
+        Write-EnhancedModuleStarterLog "The script is not running with administrative privileges."
     }
 
     Checks the current session for administrative privileges and returns the status without elevating.
@@ -398,37 +400,7 @@ function Get-ParentScriptName {
     }
 }
 
-function Write-EnhancedModuleStarterLog {
-    param (
-        [string]$Message,
-        [string]$Level = "INFO"
-    )
 
-    # Get the PowerShell call stack to determine the actual calling function
-    $callStack = Get-PSCallStack
-    $callerFunction = if ($callStack.Count -ge 2) { $callStack[1].Command } else { '<Unknown>' }
-
-    # Get the parent script name
-    $parentScriptName = Get-ParentScriptName
-
-    # Prepare the formatted message with the actual calling function information
-    $formattedMessage = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [$Level] [$parentScriptName.$callerFunction] $Message"
-
-    # Display the log message based on the log level using Write-Host
-    switch ($Level.ToUpper()) {
-        "DEBUG" { Write-Host $formattedMessage -ForegroundColor DarkGray }
-        "INFO" { Write-Host $formattedMessage -ForegroundColor Green }
-        "NOTICE" { Write-Host $formattedMessage -ForegroundColor Cyan }
-        "WARNING" { Write-Host $formattedMessage -ForegroundColor Yellow }
-        "ERROR" { Write-Host $formattedMessage -ForegroundColor Red }
-        "CRITICAL" { Write-Host $formattedMessage -ForegroundColor Magenta }
-        default { Write-Host $formattedMessage -ForegroundColor White }
-    }
-
-    # Append to log file
-    $logFilePath = [System.IO.Path]::Combine($env:TEMP, 'Module-Starter.log')
-    $formattedMessage | Out-File -FilePath $logFilePath -Append -Encoding utf8
-}
 
 function Log-Params {
     <#
