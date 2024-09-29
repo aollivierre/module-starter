@@ -1594,4 +1594,3 @@ finally {
     # Set-PSFLoggingProvider -Name 'logfile' -InstanceName $instanceName -Enabled $false
     Write-EnhancedModuleStarterLog "Exiting Install-EnhancedModuleStarterAO.ps1..." -Level 'WARNING'
 }
-Write-EnhancedModuleStarterLog "Exiting Install-EnhancedModuleStarterAO.ps1..." -Level 'WARNING'
