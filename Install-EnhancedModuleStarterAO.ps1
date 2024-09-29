@@ -9,7 +9,37 @@ if (-not (Test-Path Variable:SimulatingIntune)) {
 }
 
 
+function Write-EnhancedModuleStarterLog {
+    param (
+        [string]$Message,
+        [string]$Level = "INFO"
+    )
 
+    # Get the PowerShell call stack to determine the actual calling function
+    $callStack = Get-PSCallStack
+    $callerFunction = if ($callStack.Count -ge 2) { $callStack[1].Command } else { '<Unknown>' }
+
+    # Get the parent script name
+    $parentScriptName = Get-ParentScriptName
+
+    # Prepare the formatted message with the actual calling function information
+    $formattedMessage = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [$Level] [$parentScriptName.$callerFunction] $Message"
+
+    # Display the log message based on the log level using Write-Host
+    switch ($Level.ToUpper()) {
+        "DEBUG" { Write-Host $formattedMessage -ForegroundColor DarkGray }
+        "INFO" { Write-Host $formattedMessage -ForegroundColor Green }
+        "NOTICE" { Write-Host $formattedMessage -ForegroundColor Cyan }
+        "WARNING" { Write-Host $formattedMessage -ForegroundColor Yellow }
+        "ERROR" { Write-Host $formattedMessage -ForegroundColor Red }
+        "CRITICAL" { Write-Host $formattedMessage -ForegroundColor Magenta }
+        default { Write-Host $formattedMessage -ForegroundColor White }
+    }
+
+    # Append to log file
+    $logFilePath = [System.IO.Path]::Combine($env:TEMP, 'Module-Starter.log')
+    $formattedMessage | Out-File -FilePath $logFilePath -Append -Encoding utf8
+}
 
 function Reset-ModulePaths {
     [CmdletBinding()]
@@ -96,7 +126,7 @@ $PsExec64Path = Join-Path -Path $privateFolderPath -ChildPath "PsExec64.exe"
 
 # Check if running as a web script (no $MyInvocation.MyCommand.Path)
 if (-not $MyInvocation.MyCommand.Path) {
-    Write-EnhancedModuleStarterLog "Running as web script, downloading and executing locally..."
+    Write-EnhancedModuleStarterLog "Running as web script, downloading and executing locally..." -Level 'WARNING'
 
     # Ensure TLS 1.2 is used for the download
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -123,6 +153,7 @@ if (-not $MyInvocation.MyCommand.Path) {
     # Execute the script locally
     & $localScriptPath
 
+    Write-EnhancedModuleStarterLog "Exiting Web Script"
     Exit # Exit after running the script locally
 }
 
