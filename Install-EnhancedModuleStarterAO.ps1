@@ -216,7 +216,8 @@ function Relaunch-InPowerShell5 {
         Write-EnhancedModuleStarterLog "Hello from PowerShell 7"
 
         # Get the script path (works inside a function as well)
-        $scriptPath = $PSCommandPath
+        # $scriptPath = $PSCommandPath
+        $scriptPath = $MyInvocation.MyCommand.Path
 
         Write-EnhancedModuleStarterLog "Script path to Launch in PowerShell 5 is "$scriptPath""
 
