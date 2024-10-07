@@ -28,5 +28,6 @@
         "MSAL.PS",                  # Microsoft Authentication Library
         "PSWindowsUpdate"           # Windows Update management
         # "PSADT"                     # PowerShell App Deployment Toolkit
+        "BurntToast"                     # Showing Toast Notifications for key steps in the script
     )
 }
