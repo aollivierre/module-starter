@@ -161,47 +161,137 @@ if (-not (Test-Path -Path $tempFolder)) {
 $privateFolderPath = Join-Path -Path $tempFolder -ChildPath "private"
 $PsExec64Path = Join-Path -Path $privateFolderPath -ChildPath "PsExec64.exe"
 
-function Get-LocalScriptPath {
-    param (
-        [string]$ScriptUri = "https://raw.githubusercontent.com/aollivierre/module-starter/main/Install-EnhancedModuleStarterAO.ps1"
-    )
+# function Get-LocalScriptPath {
+#     param (
+#         [string]$ScriptUri = "https://raw.githubusercontent.com/aollivierre/module-starter/main/Install-EnhancedModuleStarterAO.ps1"
+#     )
+
+#     # Create a time-stamped folder in the temp directory
+#     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+#     $tempFolder = [System.IO.Path]::Combine($env:TEMP, "Ensure-RunningAsSystem_$timestamp")
+
+#     # Ensure the temp folder exists
+#     if (-not (Test-Path -Path $tempFolder)) {
+#         New-Item -Path $tempFolder -ItemType Directory | Out-Null
+#     }
+
+#     # Check if running as a web script (no $MyInvocation.MyCommand.Path)
+#     if (-not $MyInvocation.MyCommand.Path) {
+#         Write-EnhancedModuleStarterLog "Running as web script, downloading and executing locally..." -Level 'WARNING'
+
+#         # Ensure TLS 1.2 is used for the download
+#         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+#         # Create a time-stamped folder in the temp directory
+#         $downloadFolder = Join-Path -Path $env:TEMP -ChildPath "Install-EnhancedModuleStarterAO_$timestamp"
+
+#         # Ensure the folder exists
+#         if (-not (Test-Path -Path $downloadFolder)) {
+#             New-Item -Path $downloadFolder -ItemType Directory | Out-Null
+#         }
+
+#         # Download the script to the time-stamped folder
+#         $localScriptPath = Join-Path -Path $downloadFolder -ChildPath "Install-EnhancedModuleStarterAO.ps1"
+#         Invoke-WebRequest -Uri $ScriptUri -OutFile $localScriptPath
+
+#         # Return the local script path
+#         return $localScriptPath
+#     } else {
+#         # If running in a regular context, use the actual path of the script
+#         Write-EnhancedModuleStarterLog "Not Running as web script, executing locally..."
+#         return $MyInvocation.MyCommand.Path
+#     }
+# }
+
+
+
+
+
+
+
+
+
+
+#region CHECKING IF RUNNING AS WEB SCRIPT
+#################################################################################################
+#                                                                                               #
+#                                 CHECKING IF RUNNING AS WEB SCRIPT                             #
+#                                                                                               #
+#################################################################################################
+
+# Check if running as a web script (no $MyInvocation.MyCommand.Path)
+if (-not $MyInvocation.MyCommand.Path) {
+    Write-EnhancedModuleStarterLog -Message "Running as web script, downloading and executing locally..." -Level "NOTICE"
+
+    # Ensure TLS 1.2 is used for secure downloads
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
     # Create a time-stamped folder in the temp directory
-    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $tempFolder = [System.IO.Path]::Combine($env:TEMP, "Ensure-RunningAsSystem_$timestamp")
+    $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $downloadFolder = Join-Path -Path $env:TEMP -ChildPath "IntuneDeviceMigration_$timestamp"
+    New-Item -Path $downloadFolder -ItemType Directory | Out-Null
 
-    # Ensure the temp folder exists
-    if (-not (Test-Path -Path $tempFolder)) {
-        New-Item -Path $tempFolder -ItemType Directory | Out-Null
+    # Download the script to the time-stamped folder
+    $localScriptPath = Join-Path -Path $downloadFolder -ChildPath "setup.ps1"
+    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/aollivierre/module-starter/main/Install-EnhancedModuleStarterAO.ps1" -OutFile $localScriptPath
+
+    Write-EnhancedModuleStarterLog -Message "Re-running the script locally from: $localScriptPath" -Level "NOTICE"
+    
+    # Re-run the script locally with elevation if needed
+    if (-not (Test-Admin)) {
+        Write-EnhancedModuleStarterLog -Message "Relaunching downloaded script with elevated permissions..." -Level "NOTICE"
+        $startProcessParams = @{
+            FilePath     = "powershell.exe"
+            ArgumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $localScriptPath)
+            Verb         = "RunAs"
+        }
+        Start-Process @startProcessParams
+        exit
+    }
+    else {
+        & $localScriptPath
     }
 
-    # Check if running as a web script (no $MyInvocation.MyCommand.Path)
-    if (-not $MyInvocation.MyCommand.Path) {
-        Write-EnhancedModuleStarterLog "Running as web script, downloading and executing locally..." -Level 'WARNING'
+    Exit # Exit after running the script locally
+}
+else {
+    Write-EnhancedModuleStarterLog -Message "Running in regular context locally..." -Level "INFO"
 
-        # Ensure TLS 1.2 is used for the download
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-        # Create a time-stamped folder in the temp directory
-        $downloadFolder = Join-Path -Path $env:TEMP -ChildPath "Install-EnhancedModuleStarterAO_$timestamp"
 
-        # Ensure the folder exists
-        if (-not (Test-Path -Path $downloadFolder)) {
-            New-Item -Path $downloadFolder -ItemType Directory | Out-Null
+    # # Elevate to administrator if not already
+    if (-not (Test-Admin)) {
+        Write-EnhancedModuleStarterLog -Message "Restarting script with elevated permissions..." -Level "NOTICE"
+        $startProcessParams = @{
+            FilePath     = "powershell.exe"
+            ArgumentList = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
+            Verb         = "RunAs"
         }
-
-        # Download the script to the time-stamped folder
-        $localScriptPath = Join-Path -Path $downloadFolder -ChildPath "Install-EnhancedModuleStarterAO.ps1"
-        Invoke-WebRequest -Uri $ScriptUri -OutFile $localScriptPath
-
-        # Return the local script path
-        return $localScriptPath
-    } else {
-        # If running in a regular context, use the actual path of the script
-        Write-EnhancedModuleStarterLog "Not Running as web script, executing locally..."
-        return $MyInvocation.MyCommand.Path
+        Start-Process @startProcessParams
+        exit
     }
 }
+
+
+
+
+
+
+# Set Execution Policy to Bypass if not already set
+$currentExecutionPolicy = Get-ExecutionPolicy
+if ($currentExecutionPolicy -ne 'Bypass') {
+    Write-EnhancedModuleStarterLog -Message "Setting Execution Policy to Bypass..." -Level "NOTICE"
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+}
+else {
+    Write-EnhancedModuleStarterLog -Message "Execution Policy is already set to Bypass." -Level "INFO"
+}
+
+
+#endregion CHECKING IF RUNNING AS WEB SCRIPT
+
+
+
 
 
 
@@ -320,7 +410,7 @@ function Relaunch-InPowerShell5 {
 
 # Example usage:
 # Get the script path and pass it directly to Relaunch-InPowerShell5
-$scriptPath = Get-LocalScriptPath
+# $scriptPath = Get-LocalScriptPath
 # Relaunch-InPowerShell5 -ScriptPath $scriptPath
 
 
