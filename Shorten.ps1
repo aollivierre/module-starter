@@ -1,11 +1,61 @@
-# Path to your secrets file
-$secretsPath = "$PSScriptRoot\secrets.psd1"
+# Function to securely convert SecureString to plain text
+function ConvertFrom-SecureStringToPlainText {
+    param (
+        [Parameter(Mandatory = $true)]
+        [System.Security.SecureString]$SecureString
+    )
+    $ptr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureString)
+    try {
+        return [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($ptr)
+    }
+    finally {
+        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
+    }
+}
 
-# Import the secrets file
-$secrets = Import-PowerShellDataFile -Path $secretsPath
+# Function to retrieve secrets from secrets.bitly.psd1 or prompt user if not present
+function Get-Secrets {
+    $secretsFilePath = Join-Path -Path $PSScriptRoot -ChildPath "secrets.bitly.psd1"
 
-# Retrieve the Bitly API token from the secrets file
-$bitlyToken = $secrets.BitlyToken
+    if (-not (Test-Path -Path $secretsFilePath)) {
+        Write-Warning "Secrets file not found. Please enter your Bitly token."
+
+        # Prompt for Bitly token securely
+        $bitlyTokenSecure = Read-Host "Enter your Bitly token" -AsSecureString
+
+        # Store the token securely in the secrets.bitly.psd1 file
+        $secretsContent = @{
+            BitlyToken = $bitlyTokenSecure | ConvertFrom-SecureString
+        }
+
+        # Export to secrets.bitly.psd1 as XML to maintain security
+        $secretsContent | Export-Clixml -Path $secretsFilePath
+        Write-Host "Bitly token has been saved securely to $secretsFilePath."
+
+        # Return the secrets content
+        return $secretsContent
+    }
+    else {
+        # If the secrets file exists, import it
+        $secrets = Import-Clixml -Path $secretsFilePath
+
+        if (-not $secrets.BitlyToken) {
+            $errorMessage = "Bitly token not found in the secrets file."
+            Write-Host $errorMessage
+            throw $errorMessage
+        }
+
+        Write-Host "Using Bitly token from secrets file."
+        return $secrets
+    }
+}
+
+# Retrieve the secrets
+$secrets = Get-Secrets
+
+# Convert the Bitly token back to plain text for use in the script
+$bitlyTokenSecure = $secrets.BitlyToken | ConvertTo-SecureString
+$bitlyToken = ConvertFrom-SecureStringToPlainText -SecureString $bitlyTokenSecure
 
 # Function to prompt for GitHub raw URL and validate it
 function Get-GitHubRawUrl {
