@@ -228,11 +228,11 @@ if (-not $MyInvocation.MyCommand.Path) {
 
     # Create a time-stamped folder in the temp directory
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-    $downloadFolder = Join-Path -Path $env:TEMP -ChildPath "IntuneDeviceMigration_$timestamp"
+    $downloadFolder = Join-Path -Path $env:TEMP -ChildPath "Install-EnhancedModuleStarterAO_$timestamp"
     New-Item -Path $downloadFolder -ItemType Directory | Out-Null
 
     # Download the script to the time-stamped folder
-    $localScriptPath = Join-Path -Path $downloadFolder -ChildPath "setup.ps1"
+    $localScriptPath = Join-Path -Path $downloadFolder -ChildPath "Install-EnhancedModuleStarterAO.ps1"
     Invoke-WebRequest -Uri "https://raw.githubusercontent.com/aollivierre/module-starter/main/Install-EnhancedModuleStarterAO.ps1" -OutFile $localScriptPath
 
     Write-EnhancedModuleStarterLog -Message "Re-running the script locally from: $localScriptPath" -Level "NOTICE"
