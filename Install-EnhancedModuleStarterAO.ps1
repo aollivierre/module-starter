@@ -321,7 +321,7 @@ function Relaunch-InPowerShell5 {
 # Example usage:
 # Get the script path and pass it directly to Relaunch-InPowerShell5
 $scriptPath = Get-LocalScriptPath
-Relaunch-InPowerShell5 -ScriptPath $scriptPath
+# Relaunch-InPowerShell5 -ScriptPath $scriptPath
 
 
 # function Relaunch-InPowerShell5 {
